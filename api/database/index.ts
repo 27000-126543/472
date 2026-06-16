@@ -20,6 +20,7 @@ export async function initDatabase(): Promise<void> {
   if (fs.existsSync(dbFilePath)) {
     const fileBuffer = fs.readFileSync(dbFilePath);
     db = new SQL.Database(fileBuffer);
+    migrateDatabase();
     console.log('Database loaded from file');
   } else {
     db = new SQL.Database();
@@ -28,6 +29,74 @@ export async function initDatabase(): Promise<void> {
     saveDatabase();
     console.log('Database created and initialized');
   }
+}
+
+function migrateDatabase(): void {
+  const columns = queryMany<any>("PRAGMA table_info(orders)").map(c => c.name);
+  
+  if (!columns.includes('received_at')) {
+    db.exec('ALTER TABLE orders ADD COLUMN received_at DATETIME');
+    console.log('Migration: Added received_at column to orders table');
+  }
+  
+  if (!columns.includes('route_id')) {
+    db.exec('ALTER TABLE orders ADD COLUMN route_id TEXT');
+    console.log('Migration: Added route_id column to orders table');
+  }
+  if (!columns.includes('mission_id')) {
+    db.exec('ALTER TABLE orders ADD COLUMN mission_id TEXT');
+    console.log('Migration: Added mission_id column to orders table');
+  }
+  if (!columns.includes('total_cost')) {
+    db.exec('ALTER TABLE orders ADD COLUMN total_cost REAL');
+    console.log('Migration: Added total_cost column to orders table');
+  }
+  if (!columns.includes('distance')) {
+    db.exec('ALTER TABLE orders ADD COLUMN distance REAL');
+    console.log('Migration: Added distance column to orders table');
+  }
+  if (!columns.includes('receipt_image')) {
+    db.exec('ALTER TABLE orders ADD COLUMN receipt_image TEXT');
+    console.log('Migration: Added receipt_image column to orders table');
+  }
+  if (!columns.includes('receipt_url')) {
+    db.exec('ALTER TABLE orders ADD COLUMN receipt_url TEXT');
+    console.log('Migration: Added receipt_url column to orders table');
+  }
+  if (!columns.includes('receipt_proof')) {
+    db.exec('ALTER TABLE orders ADD COLUMN receipt_proof TEXT');
+    console.log('Migration: Added receipt_proof column to orders table');
+  }
+  if (!columns.includes('notes')) {
+    db.exec('ALTER TABLE orders ADD COLUMN notes TEXT');
+    console.log('Migration: Added notes column to orders table');
+  }
+  if (!columns.includes('delivered_at')) {
+    db.exec('ALTER TABLE orders ADD COLUMN delivered_at DATETIME');
+    console.log('Migration: Added delivered_at column to orders table');
+  }
+  
+  const nfzColumns = queryMany<any>("PRAGMA table_info(no_fly_zones)").map(c => c.name);
+  if (!nfzColumns.includes('effective_from')) {
+    db.exec('ALTER TABLE no_fly_zones ADD COLUMN effective_from DATETIME');
+    console.log('Migration: Added effective_from column to no_fly_zones table');
+  }
+  if (!nfzColumns.includes('effective_to')) {
+    db.exec('ALTER TABLE no_fly_zones ADD COLUMN effective_to DATETIME');
+    console.log('Migration: Added effective_to column to no_fly_zones table');
+  }
+  if (!nfzColumns.includes('is_active')) {
+    db.exec('ALTER TABLE no_fly_zones ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
+    console.log('Migration: Added is_active column to no_fly_zones table');
+  }
+  
+  const missionColumns = queryMany<any>("PRAGMA table_info(flight_missions)").map(c => c.name);
+  if (!missionColumns.includes('updated_at')) {
+    db.exec('ALTER TABLE flight_missions ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    console.log('Migration: Added updated_at column to flight_missions table');
+  }
+  
+  saveDatabase();
 }
 
 export function getDatabase(): Database {

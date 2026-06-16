@@ -111,11 +111,14 @@ export const useNoFlyZoneStore = create<NoFlyZoneState>((set, get) => ({
           noFlyZones: state.noFlyZones.map((z) =>
             z.id === id ? response.data : z
           ),
+          error: null,
         }));
         return true;
       }
+      set({ error: response.error || response.message || '切换状态失败' });
       return false;
-    } catch (e) {
+    } catch (e: any) {
+      set({ error: e.message || '切换状态失败' });
       return false;
     }
   },

@@ -279,11 +279,14 @@ export const useMissionStore = create<MissionState>((set, get) => ({
           missions: state.missions.map((m) =>
             m.id === id ? { ...m, status: MissionStatus.COMPLETED } : m
           ),
+          error: null,
         }));
         return true;
       }
+      set({ error: response.error || response.message || '签收确认失败' });
       return false;
-    } catch (e) {
+    } catch (e: any) {
+      set({ error: e.message || '签收确认失败' });
       return false;
     }
   },
@@ -293,10 +296,13 @@ export const useMissionStore = create<MissionState>((set, get) => ({
       const response = await missionApi.reassignMission(id, newDroneId, reason);
       if (response.success) {
         await get().fetchMissions();
+        set({ error: null });
         return true;
       }
+      set({ error: response.error || response.message || '任务改派失败' });
       return false;
-    } catch (e) {
+    } catch (e: any) {
+      set({ error: e.message || '任务改派失败' });
       return false;
     }
   },

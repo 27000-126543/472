@@ -215,8 +215,13 @@ export class MissionService {
     if (!mission) return { mission: null, order: null };
 
     const order = orderService.markReceived(mission.orderId, receiptImage);
+    const updatedMission = flightMissionRepository.confirmReceipt(missionId);
     
-    return { mission, order };
+    if (updatedMission?.droneId) {
+      droneRepository.updateStatus(updatedMission.droneId, DroneStatus.IDLE);
+    }
+    
+    return { mission: updatedMission, order };
   }
 
   reassignMission(missionId: string, newDroneId: string, operatorId: string): {
@@ -235,7 +240,7 @@ export class MissionService {
 
     const oldDroneId = mission.droneId;
     const newDrone = droneRepository.findById(newDroneId);
-    if (!newDrone || newDrone.status !== DroneStatus.IDLE) {
+    if (!newDrone || (newDrone.status !== DroneStatus.IDLE && newDrone.status !== DroneStatus.READY)) {
       return null;
     }
 
@@ -314,7 +319,7 @@ export class MissionService {
     const allDrones = droneRepository.findAll();
     return allDrones.filter(drone => 
       drone.id !== mission.droneId && 
-      drone.status === DroneStatus.IDLE &&
+      (drone.status === DroneStatus.IDLE || drone.status === DroneStatus.READY) &&
       drone.maxPayload >= order.packageWeight &&
       drone.battery >= 30
     );

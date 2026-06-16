@@ -45,7 +45,8 @@ export class NoFlyZoneRepository extends BaseRepository<NoFlyZone> {
   findActive(): NoFlyZone[] {
     const sql = `
       SELECT * FROM no_fly_zones 
-      WHERE (effective_from IS NULL OR effective_from <= CURRENT_TIMESTAMP)
+      WHERE is_active = 1
+        AND (effective_from IS NULL OR effective_from <= CURRENT_TIMESTAMP)
         AND (effective_to IS NULL OR effective_to >= CURRENT_TIMESTAMP)
       ORDER BY created_at DESC
     `;

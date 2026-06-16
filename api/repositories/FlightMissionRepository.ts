@@ -22,6 +22,7 @@ interface FlightMissionRow {
   max_altitude?: number;
   max_speed?: number;
   created_at: string;
+  updated_at?: string;
 }
 
 export class FlightMissionRepository extends BaseRepository<FlightMission> {
@@ -41,12 +42,14 @@ export class FlightMissionRepository extends BaseRepository<FlightMission> {
       deliveryTime: row.delivery_time,
       returnTime: row.return_time,
       endTime: row.end_time,
+      completedAt: row.end_time,
       actualFlightTime: row.actual_flight_time,
       actualDistance: row.actual_distance,
       batteryUsed: row.battery_used,
       maxAltitude: row.max_altitude,
       maxSpeed: row.max_speed,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
   }
 
@@ -216,6 +219,16 @@ export class FlightMissionRepository extends BaseRepository<FlightMission> {
       WHERE id = ?
     `;
     execute(sql, [newDroneId, id]);
+    return this.findById(id);
+  }
+
+  confirmReceipt(id: string): FlightMission | null {
+    const sql = `
+      UPDATE flight_missions 
+      SET status = 'completed', end_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `;
+    execute(sql, [id]);
     return this.findById(id);
   }
 }

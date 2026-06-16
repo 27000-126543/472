@@ -40,6 +40,7 @@ export default function AdminNoFlyZones() {
     toggleActive,
     fetchAffectedMissions,
     isLoading,
+    error,
   } = useNoFlyZoneStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<NoFlyZoneType | 'all'>('all');
@@ -47,6 +48,7 @@ export default function AdminNoFlyZones() {
   const [showModal, setShowModal] = useState(false);
   const [showAffectedMissions, setShowAffectedMissions] = useState(false);
   const [editingZone, setEditingZone] = useState<NoFlyZone | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [formData, setFormData] = useState<CreateNoFlyZoneRequest & { effectiveFrom?: string; effectiveTo?: string; isActive: boolean }>({
     name: '',
     type: NoFlyZoneType.WARNING,
@@ -69,6 +71,14 @@ export default function AdminNoFlyZones() {
       fetchNoFlyZones();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (error) {
+      setToast({ type: 'error', message: error });
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const filteredZones = noFlyZones.filter((z) => {
     const matchesSearch =
@@ -118,10 +128,17 @@ export default function AdminNoFlyZones() {
   };
 
   const handleToggleActive = async (zoneId: string) => {
+    const zone = noFlyZones.find(z => z.id === zoneId);
     const success = await toggleActive(zoneId);
     if (success) {
       await fetchAffectedMissions();
       await fetchNoFlyZones();
+      setToast({ 
+        type: 'success', 
+        message: zone?.isActive ? '禁飞区已停用' : '禁飞区已启用' 
+      });
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
     }
   };
 
@@ -186,7 +203,18 @@ export default function AdminNoFlyZones() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-right-5 ${
+          toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          <span className="font-medium">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-2">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white font-display">

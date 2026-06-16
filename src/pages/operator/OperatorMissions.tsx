@@ -18,6 +18,7 @@ import {
   Download,
   Activity,
   Gauge,
+  X,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useMissionStore } from '../../stores/missionStore';
@@ -50,6 +51,7 @@ export default function OperatorMissions() {
     subscribeToTelemetry,
     subscribeToAbnormalEvents,
     isLoading,
+    error,
     selectedMission,
     selectMission,
     latestTelemetry,
@@ -58,6 +60,15 @@ export default function OperatorMissions() {
   const [statusFilter, setStatusFilter] = useState<MissionStatus | 'all'>('all');
   const [showPhotoPreview, setShowPhotoPreview] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (error) {
+      setToast({ type: 'error', message: error });
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   useEffect(() => {
     if (user) {
@@ -149,8 +160,15 @@ export default function OperatorMissions() {
     if (success) {
       setShowPhotoPreview(false);
       setPreviewPhoto(null);
+      setToast({ type: 'success', message: '签收确认成功！订单状态已更新' });
       await fetchMissions();
       await fetchOrders();
+      if (selectedMission?.id === missionId) {
+        const updatedMission = missions.find(m => m.id === missionId);
+        selectMission(updatedMission || null);
+      }
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
     }
   };
 
@@ -185,7 +203,18 @@ export default function OperatorMissions() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-right-5 ${
+          toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          <span className="font-medium">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-2">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white font-display">
