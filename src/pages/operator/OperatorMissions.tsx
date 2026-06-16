@@ -19,6 +19,9 @@ import {
   Activity,
   Gauge,
   X,
+  Repeat,
+  User,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useMissionStore } from '../../stores/missionStore';
@@ -42,12 +45,15 @@ export default function OperatorMissions() {
     fetchMissions,
     telemetryData,
     abnormalEvents,
+    reassignments,
+    reassignmentsLoading,
     startMission,
     returnToBase,
     takePhoto,
     confirmReceipt,
     fetchTelemetry,
     fetchAbnormalEvents,
+    fetchReassignments,
     subscribeToTelemetry,
     subscribeToAbnormalEvents,
     isLoading,
@@ -81,6 +87,7 @@ export default function OperatorMissions() {
     if (selectedMission) {
       fetchTelemetry(selectedMission.id, 50);
       fetchAbnormalEvents(selectedMission.id);
+      fetchReassignments(selectedMission.id);
 
       const unsubTelemetry = subscribeToTelemetry((data) => {
         if (data.missionId === selectedMission.id) {
@@ -594,6 +601,92 @@ export default function OperatorMissions() {
                   </div>
                 </div>
               )}
+
+              <div className="card">
+                <div className="p-4 border-b border-dark-700">
+                  <h3 className="font-semibold text-white flex items-center gap-2">
+                    <Repeat className="w-5 h-5 text-primary-400" />
+                    改派历史
+                  </h3>
+                  <p className="text-xs text-dark-400 mt-1">
+                    共 {reassignments.length} 条改派记录
+                  </p>
+                </div>
+                <div className="p-4">
+                  {reassignmentsLoading ? (
+                    <div className="py-6 text-center">
+                      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-dark-400 mt-2 text-sm">加载中...</p>
+                    </div>
+                  ) : reassignments.length === 0 ? (
+                    <div className="py-6 text-center text-dark-400">
+                      <Repeat className="w-10 h-10 mx-auto mb-3 text-dark-600" />
+                      <p className="text-sm">暂无改派记录</p>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-gradient-to-b from-primary-500 via-primary-500/50 to-dark-700" />
+                      <div className="space-y-3">
+                        {reassignments.map((record: any, index: number) => (
+                          <div key={record.id} className="relative pl-10">
+                            <div className={`absolute left-0 top-1 w-8 h-8 rounded-full flex items-center justify-center ${
+                              index === 0 ? 'bg-primary-500' : 'bg-dark-700'
+                            }`}>
+                              <Repeat className={`w-4 h-4 ${index === 0 ? 'text-white' : 'text-primary-400'}`} />
+                            </div>
+                            <div className={`bg-dark-800 rounded-lg p-3 ${
+                              index === 0 ? 'border border-primary-500/30' : ''
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-dark-700 text-dark-300 text-xs px-2 py-0.5 rounded">
+                                    第 {reassignments.length - index} 次改派
+                                  </span>
+                                  {index === 0 && (
+                                    <span className="bg-primary-500/20 text-primary-400 text-xs px-2 py-0.5 rounded">
+                                      最新
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-dark-500 text-xs">
+                                  {formatDate(record.createdAt)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="flex-1 bg-dark-700/50 rounded px-2 py-1.5 text-center">
+                                  <p className="text-dark-400 text-xs">原无人机</p>
+                                  <p className="text-white text-sm">
+                                    {record.oldDroneName || record.oldDroneId.slice(0, 8)}
+                                  </p>
+                                </div>
+                                <ArrowRight className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                                <div className="flex-1 bg-primary-500/10 rounded px-2 py-1.5 text-center">
+                                  <p className="text-dark-400 text-xs">新无人机</p>
+                                  <p className="text-primary-400 text-sm">
+                                    {record.newDroneName || record.newDroneId.slice(0, 8)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <div className="flex items-center gap-1 text-dark-400">
+                                  <User className="w-3 h-3" />
+                                  <span>{record.reassignedByName || record.reassignedBy.slice(0, 8)}</span>
+                                </div>
+                              </div>
+                              {record.reason && (
+                                <div className="mt-2 pt-2 border-t border-dark-700/50">
+                                  <p className="text-dark-400 text-xs mb-1">改派原因</p>
+                                  <p className="text-white text-sm">{record.reason}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </>
           ) : (
             <div className="card h-[calc(100vh-280px)] flex items-center justify-center">

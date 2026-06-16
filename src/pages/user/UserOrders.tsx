@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Filter, Download, Eye, MapPin, Package, Clock, CheckCircle, FileText, Calendar, X } from 'lucide-react';
+import { Search, Filter, Download, Eye, MapPin, Package, Clock, CheckCircle, FileText, Calendar, X, Plane, User } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
 import { formatDate, formatCurrency, formatDistance } from '../../lib/constants';
@@ -9,7 +9,7 @@ import { downloadFile } from '../../lib/helpers';
 
 export default function UserOrders() {
   const { user } = useAuthStore();
-  const { orders, fetchOrders, isLoading, downloadReceipt, filters, setFilters } = useOrderStore();
+  const { orders, fetchOrders, isLoading, downloadReceipt, filters, setFilters, timeline, timelineLoading, fetchTimeline } = useOrderStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -24,6 +24,12 @@ export default function UserOrders() {
       fetchOrders();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (selectedOrder) {
+      fetchTimeline(selectedOrder.id);
+    }
+  }, [selectedOrder]);
 
   const applyFilters = () => {
     const newFilters: any = {};
@@ -358,6 +364,71 @@ export default function UserOrders() {
                     </p>
                   </div>
                 )}
+
+                <div>
+                  <p className="text-dark-400 text-xs uppercase tracking-wider mb-3">
+                    配送时间线
+                  </p>
+                  {timelineLoading ? (
+                    <div className="py-8 text-center">
+                      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-dark-500 text-sm mt-2">加载中...</p>
+                    </div>
+                  ) : timeline.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <Clock className="w-8 h-8 text-dark-600 mx-auto mb-2" />
+                      <p className="text-dark-500 text-sm">暂无时间线记录</p>
+                    </div>
+                  ) : (
+                    <div className="relative pl-6">
+                      <div className="absolute left-2 top-1 bottom-1 w-0.5 bg-dark-700" />
+                      {timeline
+                        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                        .map((event, index) => {
+                          const isCompleted = index < timeline.length - 1;
+                          const isCurrent = index === timeline.length - 1;
+                          return (
+                            <div key={event.id} className="relative pb-5 last:pb-0">
+                              <div
+                                className={`absolute -left-6 top-1 w-4 h-4 rounded-full border-2 ${
+                                  isCompleted
+                                    ? 'bg-primary-500 border-primary-500'
+                                    : isCurrent
+                                    ? 'bg-primary-500 border-primary-400 animate-pulse shadow-lg shadow-primary-500/50'
+                                    : 'bg-dark-800 border-dark-600'
+                                }`}
+                              />
+                              <div className="ml-2">
+                                <p className={`text-sm font-medium ${isCompleted || isCurrent ? 'text-white' : 'text-dark-500'}`}>
+                                  {event.title}
+                                </p>
+                                <p className="text-xs text-dark-500 mt-1">
+                                  {formatDate(event.timestamp)}
+                                </p>
+                                {event.droneName && (
+                                  <div className="flex items-center gap-1 mt-2 text-xs text-dark-400">
+                                    <Plane className="w-3 h-3 text-primary-400" />
+                                    <span>{event.droneName}</span>
+                                  </div>
+                                )}
+                                {event.operatorName && (
+                                  <div className="flex items-center gap-1 mt-1 text-xs text-dark-400">
+                                    <User className="w-3 h-3 text-primary-400" />
+                                    <span>{event.operatorName}</span>
+                                  </div>
+                                )}
+                                {event.description && (
+                                  <p className="text-xs text-dark-400 mt-2">
+                                    {event.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
 
                 {selectedOrder.receiptImage && (selectedOrder.status === OrderStatus.RECEIVED || selectedOrder.status === OrderStatus.COMPLETED) && (
                   <div>

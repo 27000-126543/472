@@ -6,6 +6,8 @@ interface NoFlyZoneState {
   noFlyZones: NoFlyZone[];
   selectedNoFlyZone: NoFlyZone | null;
   affectedMissions: any[];
+  impactPreview: any | null;
+  previewLoading: boolean;
   isLoading: boolean;
   error: string | null;
   fetchNoFlyZones: (type?: string, active?: boolean) => Promise<void>;
@@ -15,6 +17,8 @@ interface NoFlyZoneState {
   deleteNoFlyZone: (id: string) => Promise<boolean>;
   toggleActive: (id: string) => Promise<boolean>;
   fetchAffectedMissions: () => Promise<void>;
+  previewImpact: (data: any) => Promise<any | null>;
+  clearImpactPreview: () => void;
   clearSelectedNoFlyZone: () => void;
 }
 
@@ -22,6 +26,8 @@ export const useNoFlyZoneStore = create<NoFlyZoneState>((set, get) => ({
   noFlyZones: [],
   selectedNoFlyZone: null,
   affectedMissions: [],
+  impactPreview: null,
+  previewLoading: false,
   isLoading: false,
   error: null,
 
@@ -136,6 +142,25 @@ export const useNoFlyZoneStore = create<NoFlyZoneState>((set, get) => ({
       set({ error: e.message, isLoading: false });
     }
   },
+
+  previewImpact: async (data: any) => {
+    set({ previewLoading: true, error: null });
+    try {
+      const response = await noFlyZoneApi.previewImpact(data);
+      if (response.success) {
+        set({ impactPreview: response.data || null, previewLoading: false });
+        return response.data || null;
+      } else {
+        set({ error: response.error || '预览影响失败', previewLoading: false });
+        return null;
+      }
+    } catch (e: any) {
+      set({ error: e.message, previewLoading: false });
+      return null;
+    }
+  },
+
+  clearImpactPreview: () => set({ impactPreview: null }),
 
   clearSelectedNoFlyZone: () => set({ selectedNoFlyZone: null }),
 }));

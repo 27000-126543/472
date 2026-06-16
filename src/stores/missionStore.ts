@@ -17,6 +17,8 @@ interface MissionState {
   unhandledAbnormalEvents: AbnormalEvent[];
   playbackData: any;
   availableDrones: any[];
+  reassignments: any[];
+  reassignmentsLoading: boolean;
   isLoading: boolean;
   error: string | null;
   fetchMissions: (status?: string) => Promise<void>;
@@ -27,6 +29,7 @@ interface MissionState {
   fetchUnhandledAbnormalEvents: () => Promise<void>;
   fetchPlaybackData: (missionId: string) => Promise<any>;
   fetchAvailableDrones: (missionId: string) => Promise<any[]>;
+  fetchReassignments: (missionId: string) => Promise<void>;
   startMission: (id: string) => Promise<boolean>;
   takeoff: (id: string) => Promise<boolean>;
   startReturn: (id: string) => Promise<boolean>;
@@ -64,6 +67,8 @@ export const useMissionStore = create<MissionState>((set, get) => ({
   unhandledAbnormalEvents: [],
   playbackData: null,
   availableDrones: [],
+  reassignments: [],
+  reassignmentsLoading: false,
   isLoading: false,
   error: null,
 
@@ -296,6 +301,7 @@ export const useMissionStore = create<MissionState>((set, get) => ({
       const response = await missionApi.reassignMission(id, newDroneId, reason);
       if (response.success) {
         await get().fetchMissions();
+        await get().fetchReassignments(id);
         set({ error: null });
         return true;
       }
@@ -330,6 +336,21 @@ export const useMissionStore = create<MissionState>((set, get) => ({
       return [];
     } catch (e) {
       return [];
+    }
+  },
+
+  fetchReassignments: async (missionId: string) => {
+    set({ reassignmentsLoading: true });
+    try {
+      const response = await missionApi.getReassignments(missionId);
+      if (response.success) {
+        set({ reassignments: response.data || [], reassignmentsLoading: false });
+      } else {
+        set({ reassignments: [], reassignmentsLoading: false });
+      }
+    } catch (e) {
+      console.error('获取改派记录失败:', e);
+      set({ reassignments: [], reassignmentsLoading: false });
     }
   },
 

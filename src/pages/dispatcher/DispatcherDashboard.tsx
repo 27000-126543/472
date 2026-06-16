@@ -26,6 +26,8 @@ import {
   SkipBack,
   SkipForward,
   List,
+  User,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDroneStore } from '../../stores/droneStore';
@@ -51,8 +53,11 @@ export default function DispatcherDashboard() {
     isLoading: missionsLoading,
     playbackData,
     availableDrones,
+    reassignments,
+    reassignmentsLoading,
     fetchPlaybackData,
     fetchAvailableDrones,
+    fetchReassignments,
     reassignMission,
     exportPlaybackData,
     clearPlaybackData,
@@ -117,12 +122,15 @@ export default function DispatcherDashboard() {
     const success = await reassignMission(missionId, selectedReassignDrone, reassignReason);
     if (success) {
       setShowReassignModal(false);
-      setSelectedMission(null);
       setReassignReason('');
       setSelectedReassignDrone('');
       setToast({ type: 'success', message: '任务改派成功！任务和无人机状态已同步更新' });
       await fetchDrones();
       await fetchOrders();
+      const updatedMission = missions.find((m) => m.id === missionId);
+      if (updatedMission) {
+        setSelectedMission(updatedMission);
+      }
       const timer = setTimeout(() => setToast(null), 3000);
       return () => clearTimeout(timer);
     }
@@ -143,7 +151,13 @@ export default function DispatcherDashboard() {
 
   const handleOpenReassign = async (missionId: string) => {
     await fetchAvailableDrones(missionId);
+    await fetchReassignments(missionId);
     setShowReassignModal(true);
+  };
+
+  const handleSelectMission = async (mission: FlightMission) => {
+    setSelectedMission(mission);
+    await fetchReassignments(mission.id);
   };
 
   const getMissionDrone = (droneId: string) => drones.find((d) => d.id === droneId);
@@ -309,60 +323,76 @@ export default function DispatcherDashboard() {
       </div>
 
       {activeTab === 'missions' && (
-        <div className="card">
-          <div className="p-4 border-b border-dark-700">
-            <h2 className="font-semibold text-white flex items-center gap-2">
-              <List className="w-5 h-5 text-primary-400" />
-              任务管理 - 可改派任务
-            </h2>
-            <p className="text-xs text-dark-400 mt-1">等待起飞或飞行中的任务支持改派</p>
-          </div>
-          <div className="divide-y divide-dark-700/50">
-            {missions
-              .filter((m) => m.status === MissionStatus.PENDING || m.status === MissionStatus.CRUISE || m.status === MissionStatus.DELIVERING)
-              .map((mission) => {
-                const drone = getMissionDrone(mission.droneId);
-                return (
-                  <div key={mission.id} className="p-4 hover:bg-dark-800/50 transition-colors">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <p className="font-medium text-white">{mission.missionNo}</p>
-                          <StatusBadge status={mission.status} type="mission" />
-                        </div>
-                        {drone && (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
-                            <div>
-                              <p className="text-dark-400 text-xs">当前无人机</p>
-                              <p className="text-white">{drone.name}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-2">
+            <div className="card h-[calc(100vh-320px)] flex flex-col">
+              <div className="p-4 border-b border-dark-700">
+                <h2 className="font-semibold text-white flex items-center gap-2">
+                  <List className="w-5 h-5 text-primary-400" />
+                  任务管理 - 可改派任务
+                </h2>
+                <p className="text-xs text-dark-400 mt-1">等待起飞或飞行中的任务支持改派</p>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-dark-700/50">
+                {missions
+                  .filter((m) => m.status === MissionStatus.PENDING || m.status === MissionStatus.CRUISE || m.status === MissionStatus.DELIVERING)
+                  .map((mission) => {
+                    const drone = getMissionDrone(mission.droneId);
+                    return (
+                      <div
+                        key={mission.id}
+                        onClick={() => handleSelectMission(mission)}
+                        className={`p-4 cursor-pointer transition-colors ${
+                          selectedMission?.id === mission.id
+                            ? 'bg-primary-900/30 border-l-4 border-primary-500'
+                            : 'hover:bg-dark-800/50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <p className="font-medium text-white text-sm">{mission.missionNo}</p>
+                              <StatusBadge status={mission.status} type="mission" />
                             </div>
-                            <div>
-                              <p className="text-dark-400 text-xs">电量</p>
-                              <p className={getBatteryColor(drone.batteryLevel)}>
-                                {drone.batteryLevel}%
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-dark-400 text-xs">载荷</p>
-                              <p className="text-white">{drone.payloadCapacity}kg</p>
-                            </div>
-                            <div>
-                              <p className="text-dark-400 text-xs">风险原因</p>
-                              <p className="text-warning">{mission.riskReason || '无'}</p>
+                            {drone && (
+                              <div className="flex items-center gap-4 text-xs">
+                                <span className="text-dark-400">无人机: {drone.name}</span>
+                                <span className={getBatteryColor(drone.batteryLevel)}>
+                                  {drone.batteryLevel}%
+                                </span>
+                              </div>
+                            )}
+                            <div className="text-xs text-dark-500 mt-1">
+                              {formatDate(mission.createdAt)}
                             </div>
                           </div>
-                        )}
-                        <div className="text-xs text-dark-400">
-                          <p>航线: {mission.routeSummary || '已规划'}</p>
+                          <ChevronRight className="w-4 h-4 text-dark-500 mt-1" />
                         </div>
                       </div>
-                      <div className="flex gap-2 ml-4">
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-3 space-y-6">
+            {selectedMission ? (
+              <>
+                <div className="card">
+                  <div className="p-4 border-b border-dark-700">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-white">
+                          任务详情
+                        </h3>
+                        <p className="text-dark-400 text-sm mt-1">
+                          {selectedMission.missionNo}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => {
-                            setSelectedMission(mission);
-                            handleOpenReassign(mission.id);
-                          }}
-                          className="btn-secondary text-xs flex items-center gap-1"
+                          onClick={() => handleOpenReassign(selectedMission.id)}
+                          className="btn-primary text-xs flex items-center gap-1"
                         >
                           <Repeat className="w-3 h-3" />
                           改派
@@ -370,8 +400,170 @@ export default function DispatcherDashboard() {
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                  <div className="p-4">
+                    {(() => {
+                      const drone = getMissionDrone(selectedMission.droneId);
+                      const order = orders.find((o) => o.id === selectedMission.orderId);
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-3">
+                            <p className="text-dark-400 text-xs uppercase tracking-wider">
+                              无人机信息
+                            </p>
+                            <div className="bg-dark-800 rounded-lg p-4 space-y-2">
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">名称</span>
+                                <span className="text-white">{drone?.name || '-'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">型号</span>
+                                <span className="text-white">{drone?.model || '-'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">电量</span>
+                                <span className={getBatteryColor(drone?.batteryLevel || 0)}>
+                                  {drone?.batteryLevel || '-'}%
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">载荷</span>
+                                <span className="text-white">{drone?.payloadCapacity || '-'}kg</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <p className="text-dark-400 text-xs uppercase tracking-wider">
+                              任务信息
+                            </p>
+                            <div className="bg-dark-800 rounded-lg p-4 space-y-2">
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">状态</span>
+                                <StatusBadge status={selectedMission.status} type="mission" />
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">创建时间</span>
+                                <span className="text-white text-sm">
+                                  {formatDate(selectedMission.createdAt)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-dark-400">航线</span>
+                                <span className="text-white text-sm max-w-[50%] text-right">
+                                  {selectedMission.routeSummary || '已规划'}
+                                </span>
+                              </div>
+                              {selectedMission.riskReason && (
+                                <div className="flex justify-between">
+                                  <span className="text-dark-400">风险原因</span>
+                                  <span className="text-warning text-sm">{selectedMission.riskReason}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="p-4 border-b border-dark-700">
+                    <h3 className="font-semibold text-white flex items-center gap-2">
+                      <Repeat className="w-5 h-5 text-primary-400" />
+                      改派历史
+                    </h3>
+                    <p className="text-xs text-dark-400 mt-1">
+                      共 {reassignments.length} 条改派记录
+                    </p>
+                  </div>
+                  <div className="p-4">
+                    {reassignmentsLoading ? (
+                      <div className="py-8 text-center">
+                        <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                        <p className="text-dark-400 mt-2 text-sm">加载中...</p>
+                      </div>
+                    ) : reassignments.length === 0 ? (
+                      <div className="py-8 text-center text-dark-400">
+                        <Repeat className="w-10 h-10 mx-auto mb-3 text-dark-600" />
+                        <p className="text-sm">暂无改派记录</p>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-gradient-to-b from-primary-500 via-primary-500/50 to-dark-700" />
+                        <div className="space-y-4">
+                          {reassignments.map((record: any, index: number) => (
+                            <div key={record.id} className="relative pl-10">
+                              <div className={`absolute left-0 top-1 w-8 h-8 rounded-full flex items-center justify-center ${
+                                index === 0 ? 'bg-primary-500' : 'bg-dark-700'
+                              }`}>
+                                <Repeat className={`w-4 h-4 ${index === 0 ? 'text-white' : 'text-primary-400'}`} />
+                              </div>
+                              <div className={`bg-dark-800 rounded-lg p-4 ${
+                                index === 0 ? 'border border-primary-500/30' : ''
+                              }`}>
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <span className="bg-dark-700 text-dark-300 text-xs px-2 py-1 rounded">
+                                      第 {reassignments.length - index} 次改派
+                                    </span>
+                                    {index === 0 && (
+                                      <span className="bg-primary-500/20 text-primary-400 text-xs px-2 py-1 rounded">
+                                        最新
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-dark-500 text-xs">
+                                    {formatDate(record.createdAt)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="flex-1 bg-dark-700/50 rounded-lg px-3 py-2 text-center">
+                                    <p className="text-dark-400 text-xs mb-1">原无人机</p>
+                                    <p className="text-white text-sm font-medium">
+                                      {record.oldDroneName || record.oldDroneId.slice(0, 8)}
+                                    </p>
+                                  </div>
+                                  <ArrowRight className="w-5 h-5 text-primary-400 flex-shrink-0" />
+                                  <div className="flex-1 bg-primary-500/10 rounded-lg px-3 py-2 text-center">
+                                    <p className="text-dark-400 text-xs mb-1">新无人机</p>
+                                    <p className="text-primary-400 text-sm font-medium">
+                                      {record.newDroneName || record.newDroneId.slice(0, 8)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs">
+                                  <div className="flex items-center gap-1.5 text-dark-400">
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>{record.reassignedByName || record.reassignedBy.slice(0, 8)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-dark-400">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>{formatDate(record.createdAt)}</span>
+                                  </div>
+                                </div>
+                                {record.reason && (
+                                  <div className="mt-3 pt-3 border-t border-dark-700/50">
+                                    <p className="text-dark-400 text-xs mb-1">改派原因</p>
+                                    <p className="text-white text-sm">{record.reason}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="card h-[calc(100vh-320px)] flex items-center justify-center">
+                <div className="text-center text-dark-400">
+                  <Eye className="w-16 h-16 mx-auto mb-4 text-dark-600" />
+                  <p>选择一个任务查看详情</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -96,6 +96,27 @@ function migrateDatabase(): void {
     console.log('Migration: Added updated_at column to flight_missions table');
   }
   
+  const reassignTableExists = queryOne<any>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='mission_reassignments'"
+  );
+  if (!reassignTableExists) {
+    db.exec(`
+      CREATE TABLE mission_reassignments (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        order_id TEXT NOT NULL,
+        old_drone_id TEXT NOT NULL,
+        new_drone_id TEXT NOT NULL,
+        reassigned_by TEXT NOT NULL,
+        reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX idx_reassignments_mission_id ON mission_reassignments(mission_id);
+      CREATE INDEX idx_reassignments_order_id ON mission_reassignments(order_id);
+    `);
+    console.log('Migration: Created mission_reassignments table');
+  }
+  
   saveDatabase();
 }
 
@@ -185,6 +206,7 @@ function createTables(): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       delivered_at DATETIME,
+      received_at DATETIME,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (drone_id) REFERENCES drones(id)
     );
@@ -227,10 +249,27 @@ function createTables(): void {
       max_altitude REAL,
       max_speed REAL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (order_id) REFERENCES orders(id),
       FOREIGN KEY (drone_id) REFERENCES drones(id),
       FOREIGN KEY (route_id) REFERENCES flight_routes(id),
       FOREIGN KEY (operator_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS mission_reassignments (
+      id TEXT PRIMARY KEY,
+      mission_id TEXT NOT NULL,
+      order_id TEXT NOT NULL,
+      old_drone_id TEXT NOT NULL,
+      new_drone_id TEXT NOT NULL,
+      reassigned_by TEXT NOT NULL,
+      reason TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (mission_id) REFERENCES flight_missions(id),
+      FOREIGN KEY (order_id) REFERENCES orders(id),
+      FOREIGN KEY (old_drone_id) REFERENCES drones(id),
+      FOREIGN KEY (new_drone_id) REFERENCES drones(id),
+      FOREIGN KEY (reassigned_by) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS telemetry (
@@ -319,6 +358,9 @@ function createTables(): void {
     CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
     CREATE INDEX IF NOT EXISTS idx_missions_drone_id ON flight_missions(drone_id);
     CREATE INDEX IF NOT EXISTS idx_missions_status ON flight_missions(status);
+    CREATE INDEX IF NOT EXISTS idx_missions_order_id ON flight_missions(order_id);
+    CREATE INDEX IF NOT EXISTS idx_reassignments_mission_id ON mission_reassignments(mission_id);
+    CREATE INDEX IF NOT EXISTS idx_reassignments_order_id ON mission_reassignments(order_id);
     CREATE INDEX IF NOT EXISTS idx_telemetry_mission_id ON telemetry(mission_id);
     CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON telemetry(timestamp);
     CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);

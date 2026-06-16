@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { orderService } from '../services/OrderService';
+import { missionService } from '../services/MissionService';
 import { routePlanningService } from '../services/RoutePlanningService';
 import { CreateOrderRequest, OrderStatus } from '../../shared/types';
 
@@ -288,6 +289,40 @@ export class OrderController {
       res.status(500).json({
         success: false,
         message: '下载凭证失败'
+      });
+    }
+  }
+
+  async getTimeline(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const order = orderService.getById(id);
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: '订单不存在'
+        });
+      }
+
+      if (req.user?.role === 'user' && order.userId !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: '无权访问此订单'
+        });
+      }
+
+      const timeline = missionService.getOrderTimeline(id);
+
+      res.json({
+        success: true,
+        data: timeline
+      });
+    } catch (error) {
+      console.error('[OrderController] GetTimeline error:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取订单时间线失败'
       });
     }
   }

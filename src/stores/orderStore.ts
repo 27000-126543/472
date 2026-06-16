@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Order, OrderStatus, PlanRouteResponse, CreateOrderRequest } from '../../shared/types';
+import { Order, OrderStatus, PlanRouteResponse, CreateOrderRequest, OrderTimelineEvent } from '../../shared/types';
 import { orderApi } from '../lib/api';
 
 interface OrderState {
@@ -12,6 +12,8 @@ interface OrderState {
   isCreating: boolean;
   planningResult: PlanRouteResponse | null;
   createError: string | null;
+  timeline: OrderTimelineEvent[];
+  timelineLoading: boolean;
   filters: {
     orderNo: string;
     receiverName: string;
@@ -41,6 +43,7 @@ interface OrderState {
   createOrder: (data: CreateOrderRequest) => Promise<Order | null>;
   cancelOrder: (id: string) => Promise<boolean>;
   downloadReceipt: (id: string) => Promise<any>;
+  fetchTimeline: (orderId: string) => Promise<void>;
   setFilters: (filters: Partial<OrderState['filters']>) => void;
   getStats: () => {
     total: number;
@@ -68,6 +71,8 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   isCreating: false,
   planningResult: null,
   createError: null,
+  timeline: [],
+  timelineLoading: false,
   filters: {
     orderNo: '',
     receiverName: '',
@@ -156,6 +161,20 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       return null;
     } catch (e) {
       return null;
+    }
+  },
+
+  fetchTimeline: async (orderId: string) => {
+    set({ timelineLoading: true });
+    try {
+      const response = await orderApi.getTimeline(orderId);
+      if (response.success) {
+        set({ timeline: response.data || [], timelineLoading: false });
+      } else {
+        set({ timeline: [], timelineLoading: false });
+      }
+    } catch (e: any) {
+      set({ timeline: [], timelineLoading: false });
     }
   },
 

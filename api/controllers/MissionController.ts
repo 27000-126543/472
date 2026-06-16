@@ -406,7 +406,7 @@ export class MissionController {
   async reassignMission(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
-      const { newDroneId } = req.body;
+      const { newDroneId, reason } = req.body;
       const operatorId = req.user!.id;
 
       if (!newDroneId) {
@@ -416,7 +416,7 @@ export class MissionController {
         });
       }
 
-      const result = missionService.reassignMission(id, newDroneId, operatorId);
+      const result = missionService.reassignMission(id, newDroneId, operatorId, reason);
       if (!result) {
         return res.status(400).json({
           success: false,
@@ -434,6 +434,42 @@ export class MissionController {
       res.status(400).json({
         success: false,
         message: error.message || '改派失败'
+      });
+    }
+  }
+
+  async getReassignments(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const reassignments = missionService.getReassignmentsByMissionId(id);
+
+      res.json({
+        success: true,
+        data: reassignments
+      });
+    } catch (error) {
+      console.error('[MissionController] GetReassignments error:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取改派记录失败'
+      });
+    }
+  }
+
+  async getOrderTimeline(req: AuthRequest, res: Response) {
+    try {
+      const { orderId } = req.params;
+      const timeline = missionService.getOrderTimeline(orderId);
+
+      res.json({
+        success: true,
+        data: timeline
+      });
+    } catch (error) {
+      console.error('[MissionController] GetOrderTimeline error:', error);
+      res.status(500).json({
+        success: false,
+        message: '获取订单时间线失败'
       });
     }
   }

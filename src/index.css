@@ -69,6 +69,10 @@
     @apply btn bg-danger hover:bg-red-600 text-white;
   }
 
+  .btn-outline {
+    @apply btn bg-transparent border border-primary-500 text-primary-400 hover:bg-primary-500/10 hover:border-primary-400;
+  }
+
   .card {
     @apply bg-dark-900/80 backdrop-blur-sm border border-dark-700 rounded-xl 
            shadow-lg transition-all duration-200;

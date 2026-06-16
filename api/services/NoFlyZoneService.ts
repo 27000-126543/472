@@ -5,7 +5,8 @@ import { orderRepository } from '../repositories/OrderRepository';
 import { userRepository } from '../repositories/UserRepository';
 import { 
   NoFlyZone, NoFlyZoneType, CreateNoFlyZoneRequest,
-  MissionStatus, OrderStatus, UserRole, NotificationType
+  MissionStatus, OrderStatus, UserRole, NotificationType,
+  FlightMission, Order, FlightRoute
 } from '../../shared/types';
 import { pointInPolygon } from '../utils/helpers';
 import { notificationService } from './NotificationService';
@@ -61,6 +62,93 @@ export class NoFlyZoneService {
       this.validateAndNotifyAffectedMissions();
     }
     return zone;
+  }
+
+  previewImpact(zoneConfig: {
+    id?: string;
+    coordinates: { lat: number; lng: number }[];
+    type: NoFlyZoneType;
+    minAltitude?: number;
+    maxAltitude: number;
+    isActive?: boolean;
+    effectiveFrom?: string;
+    effectiveTo?: string;
+  }): {
+    affectedMissions: FlightMission[];
+    affectedOrders: Order[];
+    affectedRoutes: FlightRoute[];
+    missionCount: number;
+    orderCount: number;
+    pendingCount: number;
+    flyingCount: number;
+  } {
+    const pendingMissions = flightMissionRepository.findByStatus(MissionStatus.PENDING);
+    const readyMissions = flightMissionRepository.findByStatus(MissionStatus.READY);
+    const flyingMissions = flightMissionRepository.findByStatus(MissionStatus.FLYING);
+    const allMissions = [...pendingMissions, ...readyMissions, ...flyingMissions];
+
+    const affectedMissions: FlightMission[] = [];
+    const affectedOrders: Order[] = [];
+    const affectedRoutes: FlightRoute[] = [];
+
+    const tempZone: NoFlyZone = {
+      id: zoneConfig.id || 'preview-zone',
+      name: '预览区域',
+      type: zoneConfig.type,
+      coordinates: zoneConfig.coordinates,
+      minAltitude: zoneConfig.minAltitude || 0,
+      maxAltitude: zoneConfig.maxAltitude,
+      isActive: zoneConfig.isActive !== false,
+      reason: '',
+      createdAt: new Date().toISOString()
+    };
+
+    for (const mission of allMissions) {
+      const route = flightRouteRepository.findById(mission.routeId);
+      if (!route) continue;
+
+      let affected = false;
+      for (const wp of route.waypoints) {
+        if (pointInPolygon({ lat: wp.lat, lng: wp.lng }, tempZone.coordinates)) {
+          if (tempZone.type === NoFlyZoneType.FORBIDDEN) {
+            affected = true;
+            break;
+          } else if (tempZone.type === NoFlyZoneType.RESTRICTED && wp.altitude < tempZone.maxAltitude) {
+            affected = true;
+            break;
+          } else if (tempZone.type === NoFlyZoneType.WARNING) {
+            affected = true;
+            break;
+          }
+        }
+      }
+
+      if (affected) {
+        affectedMissions.push(mission);
+        affectedRoutes.push(route);
+        const order = orderRepository.findById(mission.orderId);
+        if (order) {
+          affectedOrders.push(order);
+        }
+      }
+    }
+
+    const pendingCount = affectedMissions.filter(
+      m => m.status === MissionStatus.PENDING || m.status === MissionStatus.READY
+    ).length;
+    const flyingCount = affectedMissions.filter(
+      m => m.status === MissionStatus.FLYING
+    ).length;
+
+    return {
+      affectedMissions,
+      affectedOrders,
+      affectedRoutes,
+      missionCount: affectedMissions.length,
+      orderCount: affectedOrders.length,
+      pendingCount,
+      flyingCount
+    };
   }
 
   private validateAndNotifyAffectedMissions(): {

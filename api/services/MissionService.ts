@@ -4,10 +4,12 @@ import { abnormalEventRepository } from '../repositories/AbnormalEventRepository
 import { droneRepository } from '../repositories/DroneRepository';
 import { orderRepository } from '../repositories/OrderRepository';
 import { userRepository } from '../repositories/UserRepository';
+import { missionReassignmentRepository } from '../repositories/MissionReassignmentRepository';
 import {
   FlightMission, MissionStatus, TelemetryData,
   AbnormalEvent, AbnormalType, Severity,
-  DroneStatus, OrderStatus, UserRole, NotificationType, Order
+  DroneStatus, OrderStatus, UserRole, NotificationType, Order,
+  MissionReassignment, OrderTimelineEvent
 } from '../../shared/types';
 import { notificationService } from './NotificationService';
 import { orderService } from './OrderService';
@@ -224,10 +226,11 @@ export class MissionService {
     return { mission: updatedMission, order };
   }
 
-  reassignMission(missionId: string, newDroneId: string, operatorId: string): {
+  reassignMission(missionId: string, newDroneId: string, operatorId: string, reason?: string): {
     mission: FlightMission | null;
     oldDroneId: string;
     newDroneId: string;
+    reassignment: MissionReassignment | null;
   } | null {
     const mission = flightMissionRepository.findById(missionId);
     if (!mission) return null;
@@ -245,10 +248,21 @@ export class MissionService {
     }
 
     const updatedMission = flightMissionRepository.reassignDrone(missionId, newDroneId);
+    let reassignment: MissionReassignment | null = null;
+    
     if (updatedMission) {
       droneRepository.updateStatus(oldDroneId, DroneStatus.IDLE);
       droneRepository.updateStatus(newDroneId, DroneStatus.READY);
       orderRepository.updateDroneId(mission.orderId, newDroneId);
+
+      reassignment = missionReassignmentRepository.create({
+        missionId,
+        orderId: mission.orderId,
+        oldDroneId,
+        newDroneId,
+        reassignedBy: operatorId,
+        reason
+      });
 
       const dispatchers = userRepository.findByRole(UserRole.DISPATCHER);
       const dispatcherIds = dispatchers.map(d => d.id);
@@ -275,7 +289,171 @@ export class MissionService {
       }
     }
 
-    return { mission: updatedMission, oldDroneId, newDroneId };
+    return { mission: updatedMission, oldDroneId, newDroneId, reassignment };
+  }
+
+  getReassignmentsByMissionId(missionId: string): MissionReassignment[] {
+    const reassignments = missionReassignmentRepository.findByMissionId(missionId);
+    return reassignments.map(r => {
+      const oldDrone = droneRepository.findById(r.oldDroneId);
+      const newDrone = droneRepository.findById(r.newDroneId);
+      const reassignedBy = userRepository.findById(r.reassignedBy);
+      return {
+        ...r,
+        oldDroneName: oldDrone?.name,
+        newDroneName: newDrone?.name,
+        reassignedByName: reassignedBy?.fullName || reassignedBy?.username
+      };
+    });
+  }
+
+  getOrderTimeline(orderId: string): OrderTimelineEvent[] {
+    const events: OrderTimelineEvent[] = [];
+    const order = orderRepository.findById(orderId);
+    if (!order) return events;
+
+    const mission = flightMissionRepository.findByOrderId(orderId);
+    const reassignments = mission ? missionReassignmentRepository.findByMissionId(mission.id) : [];
+    const drone = mission ? droneRepository.findById(mission.droneId) : null;
+    const operator = mission?.operatorId ? userRepository.findById(mission.operatorId) : null;
+
+    events.push({
+      id: `created-${order.id}`,
+      type: 'created',
+      title: '订单已创建',
+      description: '订单提交成功，等待分配无人机',
+      timestamp: order.createdAt,
+      metadata: { orderNo: order.orderNo }
+    });
+
+    if (mission && mission.droneId) {
+      events.push({
+        id: `assigned-${mission.id}`,
+        type: 'assigned',
+        title: '无人机已分配',
+        description: `无人机 ${drone?.name || ''} 已分配至该订单`,
+        timestamp: mission.createdAt,
+        droneId: mission.droneId,
+        droneName: drone?.name
+      });
+    }
+
+    if (mission?.takeoffTime) {
+      events.push({
+        id: `takeoff-${mission.id}`,
+        type: 'takeoff',
+        title: '无人机已起飞',
+        description: '无人机已起飞，正在前往目的地',
+        timestamp: mission.takeoffTime,
+        droneId: mission.droneId,
+        droneName: drone?.name,
+        operatorId: mission.operatorId,
+        operatorName: operator?.fullName || operator?.username
+      });
+    }
+
+    if (mission?.deliveryTime) {
+      events.push({
+        id: `delivered-${mission.id}`,
+        type: 'delivered',
+        title: '已送达目的地',
+        description: '无人机已到达目的地，等待签收确认',
+        timestamp: mission.deliveryTime,
+        droneId: mission.droneId,
+        droneName: drone?.name
+      });
+    }
+
+    if (mission?.returnTime) {
+      events.push({
+        id: `returning-${mission.id}`,
+        type: 'returning',
+        title: '无人机返航中',
+        description: '签收完成，无人机正在返航',
+        timestamp: mission.returnTime,
+        droneId: mission.droneId,
+        droneName: drone?.name
+      });
+    }
+
+    if (order.receivedAt) {
+      events.push({
+        id: `received-${order.id}`,
+        type: 'received',
+        title: '已签收',
+        description: '收件人已确认签收',
+        timestamp: order.receivedAt,
+        operatorId: mission?.operatorId,
+        operatorName: operator?.fullName || operator?.username
+      });
+    }
+
+    if (order.receiptUrl && order.receivedAt) {
+      events.push({
+        id: `receipt-${order.id}`,
+        type: 'receipt',
+        title: '凭证已生成',
+        description: '签收凭证已生成，可在订单详情中查看',
+        timestamp: order.receivedAt,
+        metadata: { receiptUrl: order.receiptUrl, receiptProof: order.receiptProof }
+      });
+    }
+
+    if (mission?.status === MissionStatus.COMPLETED && mission.endTime) {
+      events.push({
+        id: `completed-${mission.id}`,
+        type: 'completed',
+        title: '任务已完成',
+        description: '配送任务已完成，无人机已返航',
+        timestamp: mission.endTime,
+        droneId: mission.droneId,
+        droneName: drone?.name
+      });
+    }
+
+    for (const reassignment of reassignments) {
+      const oldDrone = droneRepository.findById(reassignment.oldDroneId);
+      const newDrone = droneRepository.findById(reassignment.newDroneId);
+      const reassignedBy = userRepository.findById(reassignment.reassignedBy);
+      events.push({
+        id: `reassign-${reassignment.id}`,
+        type: 'reassigned',
+        title: '无人机已改派',
+        description: `由 ${reassignedBy?.fullName || reassignedBy?.username} 从 ${oldDrone?.name} 改派至 ${newDrone?.name}${reassignment.reason ? `（原因：${reassignment.reason}）` : ''}`,
+        timestamp: reassignment.createdAt,
+        droneId: reassignment.newDroneId,
+        droneName: newDrone?.name,
+        operatorId: reassignment.reassignedBy,
+        operatorName: reassignedBy?.fullName || reassignedBy?.username,
+        metadata: {
+          oldDroneId: reassignment.oldDroneId,
+          oldDroneName: oldDrone?.name,
+          reason: reassignment.reason
+        }
+      });
+    }
+
+    const typeOrder: Record<string, number> = {
+      'created': 1,
+      'assigned': 2,
+      'reassigned': 3,
+      'takeoff': 4,
+      'delivered': 5,
+      'returning': 6,
+      'received': 7,
+      'receipt': 8,
+      'completed': 9
+    };
+    
+    events.sort((a, b) => {
+      const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      const orderA = typeOrder[a.type] || 10;
+      const orderB = typeOrder[b.type] || 10;
+      return orderA - orderB;
+    });
+    
+    return events;
   }
 
   getMissionPlaybackData(missionId: string) {

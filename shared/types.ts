@@ -237,6 +237,41 @@ export interface AbnormalEvent {
   handlerId?: string;
 }
 
+export interface MissionReassignment {
+  id: string;
+  missionId: string;
+  orderId: string;
+  oldDroneId: string;
+  oldDroneName?: string;
+  newDroneId: string;
+  newDroneName?: string;
+  reassignedBy: string;
+  reassignedByName?: string;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface OrderTimelineEvent {
+  id: string;
+  type: 'created' | 'assigned' | 'takeoff' | 'delivered' | 'returning' | 'received' | 'receipt' | 'reassigned' | 'completed';
+  title: string;
+  description?: string;
+  timestamp: string;
+  droneId?: string;
+  droneName?: string;
+  operatorId?: string;
+  operatorName?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface NoFlyZoneImpactPreview {
+  affectedMissions: FlightMission[];
+  affectedOrders: Order[];
+  affectedRoutes: FlightRoute[];
+  missionCount: number;
+  orderCount: number;
+}
+
 export interface Notification {
   id: string;
   type: NotificationType;

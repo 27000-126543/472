@@ -17,6 +17,7 @@ router.get('/:id/simulation', authenticateToken, missionController.getSimulation
 router.get('/:id/playback', authenticateToken, requireRole(UserRole.DISPATCHER, UserRole.ADMIN), missionController.getMissionPlaybackData);
 router.get('/:id/playback/export', authenticateToken, requireRole(UserRole.DISPATCHER, UserRole.ADMIN), missionController.exportPlaybackData);
 router.get('/:id/available-drones', authenticateToken, requireRole(UserRole.DISPATCHER, UserRole.ADMIN), missionController.getAvailableDronesForReassignment);
+router.get('/:id/reassignments', authenticateToken, requireRole(UserRole.DISPATCHER, UserRole.ADMIN), missionController.getReassignments);
 router.put('/:id/start', authenticateToken, requireRole(UserRole.OPERATOR, UserRole.ADMIN), missionController.startMission);
 router.put('/:id/takeoff', authenticateToken, requireRole(UserRole.OPERATOR, UserRole.ADMIN), missionController.takeoff);
 router.put('/:id/return', authenticateToken, requireRole(UserRole.OPERATOR, UserRole.ADMIN), missionController.startReturn);

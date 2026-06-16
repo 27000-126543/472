@@ -234,6 +234,32 @@ export class NoFlyZoneController {
       });
     }
   }
+
+  async previewImpact(req: AuthRequest, res: Response) {
+    try {
+      const zoneConfig = req.body;
+      
+      if (!zoneConfig.coordinates || !zoneConfig.type || !zoneConfig.maxAltitude) {
+        return res.status(400).json({
+          success: false,
+          message: '请提供完整的禁飞区配置信息'
+        });
+      }
+
+      const result = noFlyZoneService.previewImpact(zoneConfig);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error: any) {
+      console.error('[NoFlyZoneController] PreviewImpact error:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || '预览影响失败'
+      });
+    }
+  }
 }
 
 export const noFlyZoneController = new NoFlyZoneController();

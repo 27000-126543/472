@@ -107,6 +107,7 @@ export const orderApi = {
   getById: (id: string) => api.get(`/orders/${id}`),
   getByOrderNo: (orderNo: string) => api.get(`/orders/no/${orderNo}`),
   getReceipt: (id: string) => api.get(`/orders/${id}/receipt`),
+  getTimeline: (id: string) => api.get(`/orders/${id}/timeline`),
   downloadReceipt: (id: string) =>
     fetch(`${API_BASE_URL}/orders/${id}/receipt/download`, {
       headers: {
@@ -140,6 +141,8 @@ export const missionApi = {
     }),
   getAvailableDronesForReassignment: (id: string) =>
     api.get(`/missions/${id}/available-drones`),
+  getReassignments: (id: string) =>
+    api.get(`/missions/${id}/reassignments`),
   startMission: (id: string) => api.put(`/missions/${id}/start`),
   takeoff: (id: string) => api.put(`/missions/${id}/takeoff`),
   startReturn: (id: string) => api.put(`/missions/${id}/return`),
@@ -169,6 +172,8 @@ export const noFlyZoneApi = {
     ),
   validateRoute: (waypoints: any[]) =>
     api.post('/no-fly-zones/validate-route', { waypoints }),
+  previewImpact: (data: any) =>
+    api.post('/no-fly-zones/preview-impact', data),
   create: (data: any) => api.post('/no-fly-zones', data),
   update: (id: string, data: any) => api.put(`/no-fly-zones/${id}`),
   toggleActive: (id: string, isActive: boolean) =>

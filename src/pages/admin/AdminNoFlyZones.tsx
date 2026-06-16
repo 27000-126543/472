@@ -16,6 +16,9 @@ import {
   Calendar,
   AlertOctagon,
   CheckCircle,
+  Eye,
+  Activity,
+  Plane,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useNoFlyZoneStore } from '../../stores/noFlyZoneStore';
@@ -33,12 +36,16 @@ export default function AdminNoFlyZones() {
   const {
     noFlyZones,
     affectedMissions,
+    impactPreview,
+    previewLoading,
     fetchNoFlyZones,
     createNoFlyZone,
     updateNoFlyZone,
     deleteNoFlyZone,
     toggleActive,
     fetchAffectedMissions,
+    previewImpact,
+    clearImpactPreview,
     isLoading,
     error,
   } = useNoFlyZoneStore();
@@ -47,6 +54,7 @@ export default function AdminNoFlyZones() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showModal, setShowModal] = useState(false);
   const [showAffectedMissions, setShowAffectedMissions] = useState(false);
+  const [showImpactPreview, setShowImpactPreview] = useState(false);
   const [editingZone, setEditingZone] = useState<NoFlyZone | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [formData, setFormData] = useState<CreateNoFlyZoneRequest & { effectiveFrom?: string; effectiveTo?: string; isActive: boolean }>({
@@ -139,6 +147,48 @@ export default function AdminNoFlyZones() {
       });
       const timer = setTimeout(() => setToast(null), 3000);
       return () => clearTimeout(timer);
+    }
+  };
+
+  const handlePreviewImpact = async () => {
+    const previewData: any = {
+      name: formData.name,
+      type: formData.type,
+      coordinates: formData.coordinates,
+      minAltitude: formData.minAltitude,
+      maxAltitude: formData.maxAltitude,
+      isActive: formData.isActive,
+    };
+    if (formData.effectiveFrom) {
+      previewData.effectiveFrom = new Date(formData.effectiveFrom).toISOString();
+    }
+    if (formData.effectiveTo) {
+      previewData.effectiveTo = new Date(formData.effectiveTo).toISOString();
+    }
+    const result = await previewImpact(previewData);
+    if (result) {
+      setShowImpactPreview(true);
+    }
+  };
+
+  const handlePreviewZoneImpact = async (zone: NoFlyZone) => {
+    const previewData: any = {
+      name: zone.name,
+      type: zone.type,
+      coordinates: zone.coordinates,
+      minAltitude: zone.minAltitude,
+      maxAltitude: zone.maxAltitude,
+      isActive: true,
+    };
+    if (zone.effectiveFrom) {
+      previewData.effectiveFrom = zone.effectiveFrom;
+    }
+    if (zone.effectiveTo) {
+      previewData.effectiveTo = zone.effectiveTo;
+    }
+    const result = await previewImpact(previewData);
+    if (result) {
+      setShowImpactPreview(true);
     }
   };
 
@@ -424,6 +474,13 @@ export default function AdminNoFlyZones() {
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     <button
+                      onClick={() => handlePreviewZoneImpact(zone)}
+                      className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors"
+                      title="影响预览"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleToggleActive(zone.id)}
                       className={`p-2 rounded-lg transition-colors ${
                         zone.isActive
@@ -656,6 +713,19 @@ export default function AdminNoFlyZones() {
                 >
                   取消
                 </button>
+                <button
+                  type="button"
+                  onClick={handlePreviewImpact}
+                  disabled={previewLoading}
+                  className="btn-outline flex items-center justify-center gap-2 flex-1"
+                >
+                  {previewLoading ? (
+                    <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                  预览影响
+                </button>
                 <button type="submit" className="btn-primary flex-1">
                   {editingZone ? '保存修改' : '创建禁飞区'}
                 </button>
@@ -719,6 +789,134 @@ export default function AdminNoFlyZones() {
                 className="btn-primary w-full"
               >
                 知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImpactPreview && impactPreview && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-3xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-dark-700">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Activity className="w-5 h-5 text-primary-400" />
+                禁飞区影响预览
+              </h3>
+              <button
+                onClick={() => {
+                  setShowImpactPreview(false);
+                  clearImpactPreview();
+                }}
+                className="p-2 text-dark-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-dark-800/50 rounded-xl p-4 text-center">
+                  <div className="w-10 h-10 bg-primary-500/20 rounded-lg flex items-center justify-center mx-auto mb-2">
+                    <Activity className="w-5 h-5 text-primary-400" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{impactPreview.missionCount || 0}</p>
+                  <p className="text-xs text-dark-400 mt-1">影响任务数</p>
+                </div>
+                <div className="bg-dark-800/50 rounded-xl p-4 text-center">
+                  <div className="w-10 h-10 bg-warning/20 rounded-lg flex items-center justify-center mx-auto mb-2">
+                    <Plane className="w-5 h-5 text-warning" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{impactPreview.pendingCount || 0}</p>
+                  <p className="text-xs text-dark-400 mt-1">待起飞任务</p>
+                </div>
+                <div className="bg-dark-800/50 rounded-xl p-4 text-center">
+                  <div className="w-10 h-10 bg-success/20 rounded-lg flex items-center justify-center mx-auto mb-2">
+                    <Plane className="w-5 h-5 text-success" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{impactPreview.flyingCount || 0}</p>
+                  <p className="text-xs text-dark-400 mt-1">飞行中任务</p>
+                </div>
+                <div className="bg-dark-800/50 rounded-xl p-4 text-center">
+                  <div className="w-10 h-10 bg-info/20 rounded-lg flex items-center justify-center mx-auto mb-2">
+                    <Map className="w-5 h-5 text-info" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{impactPreview.routeCount || 0}</p>
+                  <p className="text-xs text-dark-400 mt-1">影响航线数</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
+                  <AlertOctagon className="w-4 h-4 text-warning" />
+                  受影响任务列表
+                </h4>
+                {!impactPreview.affectedMissions || impactPreview.affectedMissions.length === 0 ? (
+                  <div className="text-center py-8 text-dark-400 bg-dark-800/30 rounded-xl">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-3 text-success/30" />
+                    <p>暂无受影响的任务</p>
+                    <p className="text-xs text-dark-500 mt-1">该禁飞区不会影响现有任务</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {impactPreview.affectedMissions.map((mission: any) => (
+                      <div
+                        key={mission.id}
+                        className="p-4 bg-dark-800/50 border border-dark-700 rounded-lg hover:border-primary-500/30 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                mission.status === 'flying' || mission.status === 'in_flight'
+                                  ? 'bg-success/20'
+                                  : 'bg-warning/20'
+                              }`}
+                            >
+                              <Plane
+                                className={`w-4 h-4 ${
+                                  mission.status === 'flying' || mission.status === 'in_flight'
+                                    ? 'text-success'
+                                    : 'text-warning'
+                                }`}
+                              />
+                            </div>
+                            <div>
+                              <p className="font-medium text-white">{mission.missionNo || mission.id}</p>
+                              <p className="text-xs text-dark-400">
+                                订单: {mission.orderNo || mission.orderId || '未知'}
+                              </p>
+                            </div>
+                          </div>
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${
+                              mission.status === 'flying' || mission.status === 'in_flight'
+                                ? 'bg-success/20 text-success'
+                                : 'bg-warning/20 text-warning'
+                            }`}
+                          >
+                            {mission.status === 'flying' || mission.status === 'in_flight'
+                              ? '飞行中'
+                              : '待起飞'}
+                          </span>
+                        </div>
+                        {mission.routeSummary && (
+                          <p className="text-xs text-dark-400 mt-2">{mission.routeSummary}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-6 border-t border-dark-700">
+              <button
+                onClick={() => {
+                  setShowImpactPreview(false);
+                  clearImpactPreview();
+                }}
+                className="btn-primary w-full"
+              >
+                我知道了
               </button>
             </div>
           </div>
