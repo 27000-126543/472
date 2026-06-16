@@ -121,7 +121,7 @@ export class OrderService {
   }
 
   markReceived(id: string, receiptImage: string): Order | null {
-    const order = orderRepository.getById(id);
+    const order = orderRepository.findById(id);
     if (!order) return null;
 
     const receiptProof = generateReceiptProof(order);

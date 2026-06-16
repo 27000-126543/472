@@ -273,8 +273,7 @@ export class DroneSimulatorService {
       maxSpeed: Math.round(state.maxSpeed)
     });
 
-    const receiptUrl = `/api/orders/${state.orderId}/receipt`;
-    orderService.markDelivered(state.orderId, receiptImage, receiptUrl);
+    orderService.markDelivered(state.orderId);
 
     activeSimulations.delete(state.missionId);
   }

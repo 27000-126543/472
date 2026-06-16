@@ -12,8 +12,22 @@ interface OrderState {
   isCreating: boolean;
   planningResult: PlanRouteResponse | null;
   createError: string | null;
-  fetchOrders: (status?: string) => Promise<void>;
+  filters: {
+    orderNo: string;
+    receiverName: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+  };
+  fetchOrders: (filters?: {
+    status?: string;
+    orderNo?: string;
+    receiverName?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => Promise<void>;
   fetchOrderById: (id: string) => Promise<void>;
+  fetchOrderByNo: (orderNo: string) => Promise<Order | null>;
   planRoute: (data: {
     startLat: number;
     startLng: number;
@@ -27,6 +41,7 @@ interface OrderState {
   createOrder: (data: CreateOrderRequest) => Promise<Order | null>;
   cancelOrder: (id: string) => Promise<boolean>;
   downloadReceipt: (id: string) => Promise<any>;
+  setFilters: (filters: Partial<OrderState['filters']>) => void;
   getStats: () => {
     total: number;
     inTransit: number;
@@ -53,11 +68,26 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   isCreating: false,
   planningResult: null,
   createError: null,
+  filters: {
+    orderNo: '',
+    receiverName: '',
+    status: '',
+    startDate: '',
+    endDate: '',
+  },
 
-  fetchOrders: async (status?: string) => {
+  fetchOrders: async (filters?: {
+    status?: string;
+    orderNo?: string;
+    receiverName?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await orderApi.getAll(status);
+      const currentFilters = get().filters;
+      const mergedFilters = { ...currentFilters, ...filters };
+      const response = await orderApi.getAll(mergedFilters);
       if (response.success) {
         set({ orders: response.data || [], isLoading: false });
       } else {
@@ -66,6 +96,24 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     } catch (e: any) {
       set({ error: e.message, isLoading: false });
     }
+  },
+
+  fetchOrderByNo: async (orderNo: string) => {
+    try {
+      const response = await orderApi.getByOrderNo(orderNo);
+      if (response.success && response.data) {
+        return response.data;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  setFilters: (filters) => {
+    set((state) => ({
+      filters: { ...state.filters, ...filters },
+    }));
   },
 
   fetchOrderById: async (id: string) => {

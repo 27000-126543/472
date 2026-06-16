@@ -30,6 +30,7 @@ import {
   TelemetryData,
   AbnormalEvent,
   Order,
+  OrderStatus,
 } from '../../../shared/types';
 import { getBatteryColor, getSignalColor, downloadFile } from '../../lib/helpers';
 
@@ -43,6 +44,7 @@ export default function OperatorMissions() {
     startMission,
     returnToBase,
     takePhoto,
+    confirmReceipt,
     fetchTelemetry,
     fetchAbnormalEvents,
     subscribeToTelemetry,
@@ -54,6 +56,8 @@ export default function OperatorMissions() {
   } = useMissionStore();
   const { orders, fetchOrders } = useOrderStore();
   const [statusFilter, setStatusFilter] = useState<MissionStatus | 'all'>('all');
+  const [showPhotoPreview, setShowPhotoPreview] = useState(false);
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -113,13 +117,56 @@ export default function OperatorMissions() {
   };
 
   const handleTakePhoto = async (missionId: string) => {
-    await takePhoto(missionId);
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, 640, 480);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '24px Orbitron';
+      ctx.textAlign = 'center';
+      ctx.fillText('配送签收照片', 320, 200);
+      ctx.font = '16px Inter';
+      ctx.fillText(new Date().toLocaleString('zh-CN'), 320, 240);
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(100, 300, 440, 120);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '18px Inter';
+      ctx.fillText('无人机配送确认 - 已送达', 320, 350);
+      ctx.fillText(`任务ID: ${missionId.slice(0, 20)}...`, 320, 380);
+    }
+    const photoData = canvas.toDataURL('image/png');
+    setPreviewPhoto(photoData);
+    setShowPhotoPreview(true);
+  };
+
+  const handleConfirmReceipt = async (missionId: string) => {
+    if (!previewPhoto) return;
+    
+    const success = await confirmReceipt(missionId, previewPhoto);
+    if (success) {
+      setShowPhotoPreview(false);
+      setPreviewPhoto(null);
+      await fetchMissions();
+      await fetchOrders();
+    }
   };
 
   const handleDownloadProof = async (mission: FlightMission, order: Order | undefined) => {
-    if (order?.receiptProof) {
-      const blob = new Blob([JSON.stringify(order.receiptProof, null, 2)], { type: 'application/json' });
-      downloadFile(blob, `签收凭证-${mission.missionNo}.json`);
+    if (order?.receiptImage) {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/orders/${order.id}/receipt/download`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const blob = await response.blob();
+        downloadFile(blob, `签收凭证-${mission.missionNo}.png`);
+      } catch (e) {
+        console.error('下载失败', e);
+      }
     }
   };
 
@@ -387,7 +434,8 @@ export default function OperatorMissions() {
 
                     {(selectedMission.status === MissionStatus.CRUISE ||
                       selectedMission.status === MissionStatus.DELIVERING ||
-                      selectedMission.status === MissionStatus.TAKEOFF) && (
+                      selectedMission.status === MissionStatus.TAKEOFF ||
+                      selectedMission.status === MissionStatus.FLYING) && (
                       <button
                         onClick={() => handleReturnToBase(selectedMission.id)}
                         className="btn-warning flex items-center gap-2"
@@ -407,22 +455,70 @@ export default function OperatorMissions() {
                       </button>
                     )}
 
-                    {selectedMission.status === MissionStatus.COMPLETED &&
-                      getOrderById(selectedMission.orderId)?.receiptProof && (
+                    {selectedMission.status === MissionStatus.DELIVERED && (
+                      <>
                         <button
-                          onClick={() =>
-                            handleDownloadProof(
-                              selectedMission,
-                              getOrderById(selectedMission.orderId)
-                            )
-                          }
+                          onClick={() => handleTakePhoto(selectedMission.id)}
                           className="btn-secondary flex items-center gap-2"
                         >
-                          <Download className="w-4 h-4" />
-                          下载签收凭证
+                          <Camera className="w-4 h-4" />
+                          签收拍照
                         </button>
-                      )}
+                      </>
+                    )}
+
+                    {(selectedMission.status === MissionStatus.COMPLETED ||
+                      getOrderById(selectedMission.orderId)?.status === OrderStatus.RECEIVED) && (
+                      <button
+                        onClick={() =>
+                          handleDownloadProof(
+                            selectedMission,
+                            getOrderById(selectedMission.orderId)
+                          )
+                        }
+                        className="btn-secondary flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        下载签收凭证
+                      </button>
+                    )}
                   </div>
+
+                  {(() => {
+                    const order = getOrderById(selectedMission.orderId);
+                    if (order?.receiptImage && (order.status === OrderStatus.RECEIVED || order.status === OrderStatus.COMPLETED)) {
+                      return (
+                        <div className="mt-6">
+                          <p className="text-dark-400 text-xs uppercase tracking-wider mb-3">
+                            签收照片
+                          </p>
+                          <div className="bg-dark-800 rounded-lg p-4">
+                            <img
+                              src={order.receiptImage}
+                              alt="签收照片"
+                              className="w-full rounded-lg"
+                              onClick={() => {
+                                setPreviewPhoto(order.receiptImage!);
+                                setShowPhotoPreview(true);
+                              }}
+                            />
+                            <div className="mt-3 space-y-1">
+                              <p className="text-sm text-white">
+                                <CheckCircle className="w-4 h-4 inline mr-2 text-success" />
+                                已签收确认
+                              </p>
+                              {order.receivedAt && (
+                                <p className="text-xs text-dark-400">
+                                  签收时间: {formatDate(order.receivedAt)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 
@@ -480,6 +576,57 @@ export default function OperatorMissions() {
           )}
         </div>
       </div>
+
+      {showPhotoPreview && previewPhoto && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-dark-900 rounded-xl p-6 max-w-2xl w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">签收照片预览</h3>
+              <button
+                onClick={() => {
+                  setShowPhotoPreview(false);
+                  setPreviewPhoto(null);
+                }}
+                className="text-dark-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={previewPhoto}
+              alt="签收照片"
+              className="w-full rounded-lg mb-4"
+            />
+            {selectedMission?.status === MissionStatus.DELIVERED && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleConfirmReceipt(selectedMission.id)}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  确认签收
+                </button>
+                <button
+                  onClick={() => handleTakePhoto(selectedMission.id)}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Camera className="w-4 h-4" />
+                  重新拍照
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPhotoPreview(false);
+                    setPreviewPhoto(null);
+                  }}
+                  className="btn-outline flex items-center gap-2"
+                >
+                  取消
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

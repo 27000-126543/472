@@ -177,6 +177,7 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  receivedAt?: string;
 }
 
 export interface FlightMission {

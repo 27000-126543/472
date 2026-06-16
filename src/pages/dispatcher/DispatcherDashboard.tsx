@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   PlaneTakeoff,
   Package,
@@ -7,42 +7,142 @@ import {
   MapPin,
   Clock,
   Activity,
-  Users,
-  TrendingUp,
-  TrendingDown,
   Navigation2,
   Map,
   BarChart3,
+  Settings,
+  History,
+  Repeat,
+  Eye,
+  Download,
+  X,
+  ChevronRight,
+  Camera,
+  Zap,
+  Gauge,
+  AlertOctagon,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  List,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useDroneStore } from '../../stores/droneStore';
 import { useOrderStore } from '../../stores/orderStore';
 import { useMissionStore } from '../../stores/missionStore';
+import { useNoFlyZoneStore } from '../../stores/noFlyZoneStore';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES, formatDate, formatCurrency, formatDistance } from '../../lib/constants';
 import StatCard from '../../components/ui/StatCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { DroneStatus, OrderStatus, MissionStatus } from '../../../shared/types';
 import { getBatteryColor } from '../../lib/helpers';
+import type { FlightMission, Drone } from '../../../shared/types';
 
 export default function DispatcherDashboard() {
   const { user } = useAuthStore();
   const { drones, fetchDrones, getStats: getDroneStats, isLoading: dronesLoading } = useDroneStore();
   const { orders, fetchOrders, getStats: getOrderStats, isLoading: ordersLoading } = useOrderStore();
-  const { missions, fetchMissions, getStats: getMissionStats, isLoading: missionsLoading } = useMissionStore();
+  const { 
+    missions, 
+    fetchMissions, 
+    getStats: getMissionStats, 
+    isLoading: missionsLoading,
+    playbackData,
+    availableDrones,
+    fetchPlaybackData,
+    fetchAvailableDrones,
+    reassignMission,
+    exportPlaybackData,
+    clearPlaybackData,
+  } = useMissionStore();
+  const { noFlyZones, fetchNoFlyZones, fetchAffectedMissions, affectedMissions } = useNoFlyZoneStore();
   const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'missions' | 'playback' | 'affected'>('overview');
+  const [selectedMission, setSelectedMission] = useState<FlightMission | null>(null);
+  const [selectedDrone, setSelectedDrone] = useState<Drone | null>(null);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [showPlaybackModal, setShowPlaybackModal] = useState(false);
+  const [playbackTime, setPlaybackTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [reassignReason, setReassignReason] = useState('');
+  const [selectedReassignDrone, setSelectedReassignDrone] = useState<string>('');
 
   useEffect(() => {
     if (user) {
       fetchDrones();
       fetchOrders();
       fetchMissions();
+      fetchNoFlyZones();
+      fetchAffectedMissions();
     }
   }, [user]);
+
+  useEffect(() => {
+    let interval: number | null = null;
+    if (isPlaying && playbackData) {
+      interval = window.setInterval(() => {
+        setPlaybackTime((prev) => {
+          if (prev >= playbackData.duration) {
+            setIsPlaying(false);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlaying, playbackData]);
 
   const droneStats = getDroneStats();
   const orderStats = getOrderStats();
   const missionStats = getMissionStats();
+
+  const handleReassign = async (missionId: string) => {
+    if (!selectedReassignDrone) return;
+    const success = await reassignMission(missionId, selectedReassignDrone, reassignReason);
+    if (success) {
+      setShowReassignModal(false);
+      setSelectedMission(null);
+      setReassignReason('');
+      setSelectedReassignDrone('');
+    }
+  };
+
+  const handleOpenPlayback = async (missionId: string) => {
+    const success = await fetchPlaybackData(missionId);
+    if (success) {
+      setShowPlaybackModal(true);
+      setPlaybackTime(0);
+      setIsPlaying(false);
+    }
+  };
+
+  const handleExportPlayback = async (missionId: string) => {
+    await exportPlaybackData(missionId);
+  };
+
+  const handleOpenReassign = async (missionId: string) => {
+    await fetchAvailableDrones(missionId);
+    setShowReassignModal(true);
+  };
+
+  const getMissionDrone = (droneId: string) => drones.find((d) => d.id === droneId);
+
+  const getTelemetryAtTime = (time: number) => {
+    if (!playbackData?.telemetry || playbackData.telemetry.length === 0) return null;
+    const index = Math.min(Math.floor(time), playbackData.telemetry.length - 1);
+    return playbackData.telemetry[index];
+  };
+
+  const getCurrentPlaybackEvent = () => {
+    if (!playbackData?.events) return null;
+    return playbackData.events.find((e: any) => Math.floor(e.timestamp) === playbackTime);
+  };
 
   const activeMissions = missions.filter(
     (m) => m.status !== MissionStatus.COMPLETED && m.status !== MissionStatus.ABORTED

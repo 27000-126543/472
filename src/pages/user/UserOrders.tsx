@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Filter, Download, Eye, MapPin, Package, Clock, CheckCircle, FileText } from 'lucide-react';
+import { Search, Filter, Download, Eye, MapPin, Package, Clock, CheckCircle, FileText, Calendar, X } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useOrderStore } from '../../stores/orderStore';
 import { formatDate, formatCurrency, formatDistance } from '../../lib/constants';
@@ -9,10 +9,15 @@ import { downloadFile } from '../../lib/helpers';
 
 export default function UserOrders() {
   const { user } = useAuthStore();
-  const { orders, fetchOrders, isLoading, downloadReceipt } = useOrderStore();
+  const { orders, fetchOrders, isLoading, downloadReceipt, filters, setFilters } = useOrderStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [orderNoSearch, setOrderNoSearch] = useState('');
+  const [receiverNameSearch, setReceiverNameSearch] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -20,21 +25,51 @@ export default function UserOrders() {
     }
   }, [user]);
 
+  const applyFilters = () => {
+    const newFilters: any = {};
+    if (statusFilter !== 'all') newFilters.status = statusFilter;
+    if (orderNoSearch) newFilters.orderNo = orderNoSearch;
+    if (receiverNameSearch) newFilters.receiverName = receiverNameSearch;
+    if (startDate) newFilters.startDate = startDate;
+    if (endDate) newFilters.endDate = endDate;
+    setFilters(newFilters);
+    fetchOrders(newFilters);
+  };
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setOrderNoSearch('');
+    setReceiverNameSearch('');
+    setStartDate('');
+    setEndDate('');
+    setFilters({
+      orderNo: '',
+      receiverName: '',
+      status: '',
+      startDate: '',
+      endDate: '',
+    });
+    fetchOrders();
+  };
+
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order.orderNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.receiverName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.receiverAddress.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
 
   const handleDownloadReceipt = async (orderId: string, orderNo: string) => {
     try {
-      const receipt = await downloadReceipt(orderId);
-      if (receipt) {
-        const blob = new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' });
-        downloadFile(blob, `签收凭证-${orderNo}.json`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/orders/${orderId}/receipt/download`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        downloadFile(blob, `签收凭证-${orderNo}.png`);
       }
     } catch (e) {
       console.error('下载失败', e);
@@ -47,8 +82,10 @@ export default function UserOrders() {
     { value: OrderStatus.PENDING_ASSIGNMENT, label: '分配中' },
     { value: OrderStatus.ASSIGNED, label: '已分配' },
     { value: OrderStatus.IN_TRANSIT, label: '配送中' },
+    { value: OrderStatus.FLYING, label: '飞行中' },
     { value: OrderStatus.DELIVERED, label: '已送达' },
     { value: OrderStatus.RECEIVED, label: '已签收' },
+    { value: OrderStatus.COMPLETED, label: '已完成' },
     { value: OrderStatus.CANCELLED, label: '已取消' },
     { value: OrderStatus.FAILED, label: '失败' },
   ];
@@ -89,8 +126,74 @@ export default function UserOrders() {
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`btn-secondary text-sm ${showAdvancedFilters ? 'bg-primary-600' : ''}`}
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              高级筛选
+            </button>
           </div>
         </div>
+
+        {showAdvancedFilters && (
+          <div className="mt-4 pt-4 border-t border-dark-700 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs text-dark-400 mb-1 block">订单号</label>
+              <input
+                type="text"
+                placeholder="输入订单号..."
+                value={orderNoSearch}
+                onChange={(e) => setOrderNoSearch(e.target.value)}
+                className="input text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-dark-400 mb-1 block">收件人</label>
+              <input
+                type="text"
+                placeholder="输入收件人姓名..."
+                value={receiverNameSearch}
+                onChange={(e) => setReceiverNameSearch(e.target.value)}
+                className="input text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-dark-400 mb-1 block">开始日期</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="input text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-dark-400 mb-1 block">结束日期</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="input text-sm"
+              />
+            </div>
+            <div className="md:col-span-3 flex gap-3 justify-end">
+              <button
+                onClick={clearFilters}
+                className="btn-outline text-sm flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                清除筛选
+              </button>
+              <button
+                onClick={applyFilters}
+                className="btn-primary text-sm flex items-center gap-2"
+              >
+                <Filter className="w-4 h-4" />
+                应用筛选
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -256,28 +359,54 @@ export default function UserOrders() {
                   </div>
                 )}
 
-                {selectedOrder.receiptProof && (
+                {selectedOrder.receiptImage && (selectedOrder.status === OrderStatus.RECEIVED || selectedOrder.status === OrderStatus.COMPLETED) && (
                   <div>
                     <p className="text-dark-400 text-xs uppercase tracking-wider mb-2">
                       签收凭证
                     </p>
                     <div className="bg-dark-800 rounded-lg p-4">
-                      <div className="flex items-center gap-3">
-                        <FileText className="w-8 h-8 text-success" />
-                        <div>
-                          <p className="text-white text-sm font-medium">
-                            已签收
-                          </p>
-                          <p className="text-dark-400 text-xs">
-                            配送人员已拍照确认
-                          </p>
+                      <img
+                        src={selectedOrder.receiptImage}
+                        alt="签收照片"
+                        className="w-full rounded-lg mb-3"
+                      />
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="w-5 h-5 text-success" />
+                          <div>
+                            <p className="text-white text-sm font-medium">
+                              已签收确认
+                            </p>
+                            {selectedOrder.receivedAt && (
+                              <p className="text-dark-400 text-xs">
+                                签收时间: {formatDate(selectedOrder.receivedAt)}
+                              </p>
+                            )}
+                          </div>
                         </div>
+                        {selectedOrder.receiptProof && (
+                          <div className="mt-3 pt-3 border-t border-dark-700">
+                            <p className="text-xs text-dark-400 mb-1">凭证信息</p>
+                            <p className="text-xs text-dark-300 font-mono break-all">
+                              {(() => {
+                                try {
+                                  const proof = typeof selectedOrder.receiptProof === 'string' 
+                                    ? JSON.parse(selectedOrder.receiptProof) 
+                                    : selectedOrder.receiptProof;
+                                  return proof.verificationCode || '-';
+                                } catch {
+                                  return '-';
+                                }
+                              })()}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
 
-                {selectedOrder.status === OrderStatus.RECEIVED && (
+                {(selectedOrder.status === OrderStatus.RECEIVED || selectedOrder.status === OrderStatus.COMPLETED) && (
                   <button
                     onClick={() =>
                       handleDownloadReceipt(selectedOrder.id, selectedOrder.orderNo)
@@ -285,7 +414,7 @@ export default function UserOrders() {
                     className="btn-primary w-full"
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    下载签收凭证
+                    下载签收凭证 (PNG)
                   </button>
                 )}
               </div>
