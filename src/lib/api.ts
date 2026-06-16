@@ -148,8 +148,8 @@ export const missionApi = {
     api.put(`/missions/${id}/photo`, { photoData }),
   confirmReceipt: (id: string, receiptImage: string) =>
     api.put(`/missions/${id}/confirm-receipt`, { receiptImage }),
-  reassignMission: (id: string, newDroneId: string) =>
-    api.put(`/missions/${id}/reassign`, { newDroneId }),
+  reassignMission: (id: string, newDroneId: string, reason?: string) =>
+    api.put(`/missions/${id}/reassign`, { newDroneId, reason }),
   handleAbnormalEvent: (id: string) =>
     api.put(`/missions/abnormal/${id}/handle`),
 };

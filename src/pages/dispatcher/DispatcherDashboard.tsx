@@ -179,6 +179,72 @@ export default function DispatcherDashboard() {
         </div>
       </div>
 
+      <div className="flex gap-2 border-b border-dark-700">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'overview'
+              ? 'text-primary-400 border-primary-500'
+              : 'text-dark-400 border-transparent hover:text-dark-200'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            总览
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('missions')}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'missions'
+              ? 'text-primary-400 border-primary-500'
+              : 'text-dark-400 border-transparent hover:text-dark-200'
+          }`}
+        >
+          <List className="w-4 h-4" />
+          任务管理
+          {affectedMissions.length > 0 && (
+            <span className="bg-danger text-white text-xs px-1.5 py-0.5 rounded-full">
+              {affectedMissions.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('playback')}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'playback'
+              ? 'text-primary-400 border-primary-500'
+              : 'text-dark-400 border-transparent hover:text-dark-200'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <History className="w-4 h-4" />
+            任务回放
+          </span>
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('affected');
+            fetchAffectedMissions();
+          }}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'affected'
+              ? 'text-primary-400 border-primary-500'
+              : 'text-dark-400 border-transparent hover:text-dark-200'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <AlertOctagon className="w-4 h-4" />
+            受影响任务
+            {affectedMissions.length > 0 && (
+              <span className="bg-warning text-dark-950 text-xs px-1.5 py-0.5 rounded-full">
+                {affectedMissions.length}
+              </span>
+            )}
+          </span>
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="无人机总数"
@@ -216,6 +282,170 @@ export default function DispatcherDashboard() {
         />
       </div>
 
+      {activeTab === 'missions' && (
+        <div className="card">
+          <div className="p-4 border-b border-dark-700">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <List className="w-5 h-5 text-primary-400" />
+              任务管理 - 可改派任务
+            </h2>
+            <p className="text-xs text-dark-400 mt-1">等待起飞或飞行中的任务支持改派</p>
+          </div>
+          <div className="divide-y divide-dark-700/50">
+            {missions
+              .filter((m) => m.status === MissionStatus.PENDING || m.status === MissionStatus.CRUISE || m.status === MissionStatus.DELIVERING)
+              .map((mission) => {
+                const drone = getMissionDrone(mission.droneId);
+                return (
+                  <div key={mission.id} className="p-4 hover:bg-dark-800/50 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <p className="font-medium text-white">{mission.missionNo}</p>
+                          <StatusBadge status={mission.status} type="mission" />
+                        </div>
+                        {drone && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
+                            <div>
+                              <p className="text-dark-400 text-xs">当前无人机</p>
+                              <p className="text-white">{drone.name}</p>
+                            </div>
+                            <div>
+                              <p className="text-dark-400 text-xs">电量</p>
+                              <p className={getBatteryColor(drone.batteryLevel)}>
+                                {drone.batteryLevel}%
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-dark-400 text-xs">载荷</p>
+                              <p className="text-white">{drone.payloadCapacity}kg</p>
+                            </div>
+                            <div>
+                              <p className="text-dark-400 text-xs">风险原因</p>
+                              <p className="text-warning">{mission.riskReason || '无'}</p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-xs text-dark-400">
+                          <p>航线: {mission.routeSummary || '已规划'}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => {
+                            setSelectedMission(mission);
+                            handleOpenReassign(mission.id);
+                          }}
+                          className="btn-secondary text-xs flex items-center gap-1"
+                        >
+                          <Repeat className="w-3 h-3" />
+                          改派
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'playback' && (
+        <div className="card">
+          <div className="p-4 border-b border-dark-700">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <History className="w-5 h-5 text-primary-400" />
+              任务回放
+            </h2>
+            <p className="text-xs text-dark-400 mt-1">选择已完成任务进行回放</p>
+          </div>
+          <div className="divide-y divide-dark-700/50">
+            {missions
+              .filter((m) => m.status === MissionStatus.COMPLETED)
+              .map((mission) => {
+                const drone = getMissionDrone(mission.droneId);
+                return (
+                  <div key={mission.id} className="p-4 hover:bg-dark-800/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <p className="font-medium text-white">{mission.missionNo}</p>
+                          <StatusBadge status={mission.status} type="mission" />
+                        </div>
+                        <p className="text-xs text-dark-400">
+                          无人机: {drone?.name || '未知'} | 完成时间: {formatDate(mission.completedAt || mission.updatedAt)}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleOpenPlayback(mission.id)}
+                          className="btn-secondary text-xs flex items-center gap-1"
+                        >
+                          <Play className="w-3 h-3" />
+                          回放
+                        </button>
+                        <button
+                          onClick={() => handleExportPlayback(mission.id)}
+                          className="btn-primary text-xs flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" />
+                          导出
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'affected' && (
+        <div className="card">
+          <div className="p-4 border-b border-dark-700">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <AlertOctagon className="w-5 h-5 text-warning" />
+              受禁飞区变更影响的任务
+            </h2>
+            <p className="text-xs text-dark-400 mt-1">这些任务需要重新规划航线</p>
+          </div>
+          <div className="divide-y divide-dark-700/50">
+            {affectedMissions.length === 0 ? (
+              <div className="p-8 text-center text-dark-400">
+                <CheckCircle className="w-10 h-10 mx-auto mb-3 text-success/30" />
+                <p>暂无受影响的任务</p>
+              </div>
+            ) : (
+              affectedMissions.map((mission: any) => (
+                <div key={mission.id} className="p-4 hover:bg-dark-800/50 transition-colors bg-warning/5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <p className="font-medium text-white">{mission.missionNo}</p>
+                        <span className="bg-warning/20 text-warning text-xs px-2 py-0.5 rounded">
+                          需要重新规划
+                        </span>
+                      </div>
+                      <p className="text-xs text-dark-400">
+                        原因: 禁飞区规则变更 | 任务状态: {mission.status}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => navigate(ROUTES.DISPATCHER_REALTIME)}
+                      className="btn-primary text-xs flex items-center gap-1"
+                    >
+                      <Settings className="w-3 h-3" />
+                      处理
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'overview' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <div className="card">
@@ -476,6 +706,273 @@ export default function DispatcherDashboard() {
           </div>
         </div>
       </div>
+      )}
+
+      {showReassignModal && selectedMission && (
+        <div className="fixed inset-0 bg-dark-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-lg">
+            <div className="flex items-center justify-between p-4 border-b border-dark-700">
+              <h3 className="font-semibold text-white">任务改派 - {selectedMission.missionNo}</h3>
+              <button
+                onClick={() => {
+                  setShowReassignModal(false);
+                  setSelectedMission(null);
+                }}
+                className="text-dark-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm text-dark-400 mb-2">当前无人机</label>
+                <p className="text-white">
+                  {getMissionDrone(selectedMission.droneId)?.name || '未知'}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm text-dark-400 mb-2">改派原因</label>
+                <textarea
+                  value={reassignReason}
+                  onChange={(e) => setReassignReason(e.target.value)}
+                  className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500 resize-none"
+                  rows={3}
+                  placeholder="请输入改派原因..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-dark-400 mb-2">选择目标无人机</label>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {availableDrones.map((drone: any) => (
+                    <label
+                      key={drone.id}
+                      className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                        selectedReassignDrone === drone.id
+                          ? 'bg-primary-900/30 border border-primary-500'
+                          : 'bg-dark-800 hover:bg-dark-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="drone"
+                        value={drone.id}
+                        checked={selectedReassignDrone === drone.id}
+                        onChange={(e) => setSelectedReassignDrone(e.target.value)}
+                        className="sr-only"
+                      />
+                      <div className="flex-1">
+                        <p className="text-white text-sm font-medium">{drone.name}</p>
+                        <div className="flex gap-4 text-xs mt-1">
+                          <span className={getBatteryColor(drone.batteryLevel)}>
+                            电量 {drone.batteryLevel}%
+                          </span>
+                          <span className="text-dark-400">
+                            载荷 {drone.payloadCapacity}kg
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 ${
+                          selectedReassignDrone === drone.id
+                            ? 'border-primary-500 bg-primary-500'
+                            : 'border-dark-500'
+                        }`}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-4 border-t border-dark-700">
+              <button
+                onClick={() => {
+                  setShowReassignModal(false);
+                  setSelectedMission(null);
+                }}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleReassign(selectedMission.id)}
+                disabled={!selectedReassignDrone}
+                className="btn-primary"
+              >
+                确认改派
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPlaybackModal && playbackData && (
+        <div className="fixed inset-0 bg-dark-950/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-dark-700">
+              <h3 className="font-semibold text-white">任务回放 - {playbackData.missionNo}</h3>
+              <button
+                onClick={() => {
+                  setShowPlaybackModal(false);
+                  clearPlaybackData();
+                }}
+                className="text-dark-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="card p-3">
+                  <p className="text-xs text-dark-400 mb-1">当前位置</p>
+                  <p className="text-white text-sm font-mono">
+                    {getTelemetryAtTime(playbackTime)?.location?.lat?.toFixed(4) || '-'}, 
+                    {getTelemetryAtTime(playbackTime)?.location?.lng?.toFixed(4) || '-'}
+                  </p>
+                </div>
+                <div className="card p-3">
+                  <p className="text-xs text-dark-400 mb-1">电量</p>
+                  <p className={`text-lg font-bold ${getBatteryColor(getTelemetryAtTime(playbackTime)?.batteryLevel || 0)}`}>
+                    {getTelemetryAtTime(playbackTime)?.batteryLevel || 0}%
+                  </p>
+                </div>
+                <div className="card p-3">
+                  <p className="text-xs text-dark-400 mb-1">速度</p>
+                  <p className="text-white text-lg font-bold">
+                    {getTelemetryAtTime(playbackTime)?.speed?.toFixed(1) || 0} m/s
+                  </p>
+                </div>
+                <div className="card p-3">
+                  <p className="text-xs text-dark-400 mb-1">高度</p>
+                  <p className="text-white text-lg font-bold">
+                    {getTelemetryAtTime(playbackTime)?.altitude?.toFixed(0) || 0} m
+                  </p>
+                </div>
+              </div>
+
+              <div className="card p-4 mb-6">
+                <div className="relative w-full h-64 bg-dark-900 rounded-lg overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-dark-900 via-dark-800 to-dark-900 grid-pattern opacity-50" />
+                  {playbackData.telemetry?.map((t: any, i: number) => (
+                    <div
+                      key={i}
+                      className="absolute w-2 h-2 rounded-full bg-primary-500/30 transform -translate-x-1/2 -translate-y-1/2"
+                      style={{
+                        left: `${20 + (i / playbackData.telemetry.length) * 60}%`,
+                        top: `${30 + ((t.altitude || 50) / 200) * 40}%`,
+                      }}
+                    />
+                  ))}
+                  {playbackData.photoPoints?.map((p: any, i: number) => (
+                    <div
+                      key={`photo-${i}`}
+                      className="absolute transform -translate-x-1/2 -translate-y-1/2"
+                      style={{
+                        left: `${25 + (i * 20) % 50}%`,
+                        top: '40%',
+                      }}
+                    >
+                      <Camera className="w-4 h-4 text-cyan-400" />
+                    </div>
+                  ))}
+                  {playbackData.abnormalPoints?.map((a: any, i: number) => (
+                    <div
+                      key={`abnormal-${i}`}
+                      className="absolute transform -translate-x-1/2 -translate-y-1/2"
+                      style={{
+                        left: `${30 + (i * 25) % 40}%`,
+                        top: '50%',
+                      }}
+                    >
+                      <AlertTriangle className="w-4 h-4 text-danger" />
+                    </div>
+                  ))}
+                  {getTelemetryAtTime(playbackTime) && (
+                    <div
+                      className="absolute w-4 h-4 bg-primary-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 animate-pulse shadow-lg shadow-primary-500/50"
+                      style={{
+                        left: `${20 + (playbackTime / playbackData.duration) * 60}%`,
+                        top: `${30 + ((getTelemetryAtTime(playbackTime)?.altitude || 50) / 200) * 40}%`,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-white">时间轴事件</h4>
+                <div className="space-y-2">
+                  {playbackData.events?.map((event: any, i: number) => (
+                    <div
+                      key={i}
+                      className={`p-3 rounded-lg ${
+                        Math.floor(event.timestamp) === playbackTime
+                          ? 'bg-primary-900/30 border border-primary-500/50'
+                          : 'bg-dark-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {event.type === 'photo' && <Camera className="w-4 h-4 text-cyan-400" />}
+                          {event.type === 'abnormal' && <AlertTriangle className="w-4 h-4 text-danger" />}
+                          {event.type === 'status' && <Activity className="w-4 h-4 text-primary-400" />}
+                          <span className="text-white text-sm">{event.description}</span>
+                        </div>
+                        <span className="text-xs text-dark-400">
+                          T+{Math.floor(event.timestamp)}s
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-dark-700">
+              <div className="flex items-center gap-4 mb-3">
+                <button
+                  onClick={() => setPlaybackTime(0)}
+                  className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+                >
+                  <SkipBack className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setIsPlaying(!isPlaying)}
+                  className="p-3 bg-primary-500 hover:bg-primary-600 rounded-full text-white transition-colors"
+                >
+                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={() => setPlaybackTime(playbackData.duration)}
+                  className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+                >
+                  <SkipForward className="w-5 h-5" />
+                </button>
+                <div className="flex-1">
+                  <input
+                    type="range"
+                    min={0}
+                    max={playbackData.duration}
+                    value={playbackTime}
+                    onChange={(e) => setPlaybackTime(Number(e.target.value))}
+                    className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                </div>
+                <span className="text-sm text-dark-400 font-mono min-w-[80px] text-right">
+                  {playbackTime}s / {playbackData.duration}s
+                </span>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => handleExportPlayback(playbackData.missionId)}
+                  className="btn-secondary text-sm flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  导出回放数据
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

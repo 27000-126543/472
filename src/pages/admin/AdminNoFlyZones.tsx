@@ -12,6 +12,10 @@ import {
   Ruler,
   Layers,
   Clock,
+  Power,
+  Calendar,
+  AlertOctagon,
+  CheckCircle,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useNoFlyZoneStore } from '../../stores/noFlyZoneStore';
@@ -28,17 +32,22 @@ export default function AdminNoFlyZones() {
   const { user } = useAuthStore();
   const {
     noFlyZones,
+    affectedMissions,
     fetchNoFlyZones,
     createNoFlyZone,
     updateNoFlyZone,
     deleteNoFlyZone,
+    toggleActive,
+    fetchAffectedMissions,
     isLoading,
   } = useNoFlyZoneStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<NoFlyZoneType | 'all'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showModal, setShowModal] = useState(false);
+  const [showAffectedMissions, setShowAffectedMissions] = useState(false);
   const [editingZone, setEditingZone] = useState<NoFlyZone | null>(null);
-  const [formData, setFormData] = useState<CreateNoFlyZoneRequest>({
+  const [formData, setFormData] = useState<CreateNoFlyZoneRequest & { effectiveFrom?: string; effectiveTo?: string; isActive: boolean }>({
     name: '',
     type: NoFlyZoneType.WARNING,
     coordinates: [
@@ -50,6 +59,9 @@ export default function AdminNoFlyZones() {
     minAltitude: 0,
     maxAltitude: 500,
     reason: '',
+    effectiveFrom: '',
+    effectiveTo: '',
+    isActive: true,
   });
 
   useEffect(() => {
@@ -63,7 +75,10 @@ export default function AdminNoFlyZones() {
       z.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       z.reason.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === 'all' || z.type === typeFilter;
-    return matchesSearch && matchesType;
+    const matchesActive = activeFilter === 'all' || 
+      (activeFilter === 'active' && z.isActive) || 
+      (activeFilter === 'inactive' && !z.isActive);
+    return matchesSearch && matchesType && matchesActive;
   });
 
   const handleOpenModal = (zone?: NoFlyZone) => {
@@ -76,6 +91,9 @@ export default function AdminNoFlyZones() {
         minAltitude: zone.minAltitude,
         maxAltitude: zone.maxAltitude,
         reason: zone.reason,
+        effectiveFrom: zone.effectiveFrom?.split('T')[0] || '',
+        effectiveTo: zone.effectiveTo?.split('T')[0] || '',
+        isActive: zone.isActive,
       });
     } else {
       setEditingZone(null);
@@ -91,27 +109,46 @@ export default function AdminNoFlyZones() {
         minAltitude: 0,
         maxAltitude: 500,
         reason: '',
+        effectiveFrom: '',
+        effectiveTo: '',
+        isActive: true,
       });
     }
     setShowModal(true);
   };
 
+  const handleToggleActive = async (zoneId: string) => {
+    const success = await toggleActive(zoneId);
+    if (success) {
+      await fetchAffectedMissions();
+      await fetchNoFlyZones();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const submitData: any = {
+      name: formData.name,
+      type: formData.type,
+      coordinates: formData.coordinates,
+      minAltitude: formData.minAltitude,
+      maxAltitude: formData.maxAltitude,
+      reason: formData.reason,
+      isActive: formData.isActive,
+    };
+    if (formData.effectiveFrom) {
+      submitData.effectiveFrom = new Date(formData.effectiveFrom).toISOString();
+    }
+    if (formData.effectiveTo) {
+      submitData.effectiveTo = new Date(formData.effectiveTo).toISOString();
+    }
     if (editingZone) {
-      const updateData: any = {
-        name: formData.name,
-        type: formData.type,
-        coordinates: formData.coordinates,
-        minAltitude: formData.minAltitude,
-        maxAltitude: formData.maxAltitude,
-        reason: formData.reason,
-      };
-      await updateNoFlyZone(editingZone.id, updateData);
+      await updateNoFlyZone(editingZone.id, submitData);
     } else {
-      await createNoFlyZone(formData);
+      await createNoFlyZone(submitData);
     }
     setShowModal(false);
+    await fetchAffectedMissions();
     await fetchNoFlyZones();
   };
 
@@ -223,6 +260,24 @@ export default function AdminNoFlyZones() {
         </div>
       </div>
 
+      <div className="flex gap-3 mb-4">
+        <button
+          onClick={() => {
+            setShowAffectedMissions(true);
+            fetchAffectedMissions();
+          }}
+          className="btn-secondary flex items-center gap-2"
+        >
+          <AlertOctagon className="w-4 h-4 text-warning" />
+          查看受影响任务
+          {affectedMissions.length > 0 && (
+            <span className="bg-warning text-dark-950 text-xs px-1.5 py-0.5 rounded-full">
+              {affectedMissions.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       <div className="card p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
@@ -246,6 +301,15 @@ export default function AdminNoFlyZones() {
                 {label}
               </option>
             ))}
+          </select>
+          <select
+            value={activeFilter}
+            onChange={(e) => setActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
+            className="input w-40"
+          >
+            <option value="all">全部状态</option>
+            <option value="active">已启用</option>
+            <option value="inactive">已禁用</option>
           </select>
         </div>
       </div>
@@ -315,12 +379,33 @@ export default function AdminNoFlyZones() {
                         顶点：{zone.coordinates.length}个
                       </div>
                       <div className="flex items-center gap-1 text-dark-400">
+                        <Calendar className="w-4 h-4" />
+                        {zone.effectiveFrom && zone.effectiveTo
+                          ? `${formatDate(zone.effectiveFrom)} 至 ${formatDate(zone.effectiveTo)}`
+                          : zone.effectiveFrom
+                          ? `生效于 ${formatDate(zone.effectiveFrom)}`
+                          : zone.effectiveTo
+                          ? `失效于 ${formatDate(zone.effectiveTo)}`
+                          : '永久有效'}
+                      </div>
+                      <div className="flex items-center gap-1 text-dark-400">
                         <Clock className="w-4 h-4" />
                         {formatDate(zone.createdAt)}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => handleToggleActive(zone.id)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        zone.isActive
+                          ? 'text-success hover:bg-success/10'
+                          : 'text-dark-500 hover:bg-dark-700 hover:text-dark-300'
+                      }`}
+                      title={zone.isActive ? '点击禁用' : '点击启用'}
+                    >
+                      <Power className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleOpenModal(zone)}
                       className="p-2 text-dark-400 hover:text-primary-400 transition-colors"
@@ -435,6 +520,45 @@ export default function AdminNoFlyZones() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">生效开始日期</label>
+                  <input
+                    type="date"
+                    value={formData.effectiveFrom}
+                    onChange={(e) =>
+                      setFormData({ ...formData, effectiveFrom: e.target.value })
+                    }
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="label">生效结束日期</label>
+                  <input
+                    type="date"
+                    value={formData.effectiveTo}
+                    onChange={(e) =>
+                      setFormData({ ...formData, effectiveTo: e.target.value })
+                    }
+                    className="input"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isActive}
+                    onChange={(e) =>
+                      setFormData({ ...formData, isActive: e.target.checked })
+                    }
+                    className="w-5 h-5 rounded bg-dark-800 border-dark-600 text-primary-500 focus:ring-primary-500"
+                  />
+                  <span className="text-white">立即可用（保存后立即生效）</span>
+                </label>
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="label mb-0">多边形顶点坐标</label>
@@ -509,6 +633,66 @@ export default function AdminNoFlyZones() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAffectedMissions && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-dark-700">
+              <h3 className="font-semibold text-white flex items-center gap-2">
+                <AlertOctagon className="w-5 h-5 text-warning" />
+                受禁飞区变更影响的任务
+              </h3>
+              <button
+                onClick={() => setShowAffectedMissions(false)}
+                className="text-dark-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {affectedMissions.length === 0 ? (
+                <div className="text-center py-8 text-dark-400">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-3 text-success/30" />
+                  <p>暂无受影响的任务</p>
+                  <p className="text-xs text-dark-500 mt-1">禁飞区变更未影响待执行任务</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {affectedMissions.map((mission: any) => (
+                    <div
+                      key={mission.id}
+                      className="p-4 bg-warning/5 border border-warning/30 rounded-lg"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="font-medium text-white">{mission.missionNo}</p>
+                          <p className="text-xs text-dark-400 mt-1">
+                            订单: {mission.orderNo || '未知'}
+                          </p>
+                        </div>
+                        <span className="bg-warning/20 text-warning text-xs px-2 py-0.5 rounded">
+                          需要重新规划
+                        </span>
+                      </div>
+                      <p className="text-xs text-dark-300">
+                        原航线与更新后的禁飞区存在冲突，已推送至调度员处理。
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-dark-700">
+              <button
+                onClick={() => setShowAffectedMissions(false)}
+                className="btn-primary w-full"
+              >
+                知道了
+              </button>
+            </div>
           </div>
         </div>
       )}

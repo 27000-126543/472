@@ -31,6 +31,7 @@ export class DroneRepository extends BaseRepository<Drone> {
       model: row.model,
       serialNumber: row.serial_number,
       maxPayload: row.max_payload,
+      payloadCapacity: row.max_payload,
       maxFlightTime: row.max_flight_time,
       cruiseSpeed: row.cruise_speed,
       status: row.status,

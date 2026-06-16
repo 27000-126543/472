@@ -5,6 +5,7 @@ import { noFlyZoneApi } from '../lib/api';
 interface NoFlyZoneState {
   noFlyZones: NoFlyZone[];
   selectedNoFlyZone: NoFlyZone | null;
+  affectedMissions: any[];
   isLoading: boolean;
   error: string | null;
   fetchNoFlyZones: (type?: string, active?: boolean) => Promise<void>;
@@ -12,12 +13,15 @@ interface NoFlyZoneState {
   createNoFlyZone: (data: any) => Promise<boolean>;
   updateNoFlyZone: (id: string, data: any) => Promise<boolean>;
   deleteNoFlyZone: (id: string) => Promise<boolean>;
+  toggleActive: (id: string) => Promise<boolean>;
+  fetchAffectedMissions: () => Promise<void>;
   clearSelectedNoFlyZone: () => void;
 }
 
-export const useNoFlyZoneStore = create<NoFlyZoneState>((set) => ({
+export const useNoFlyZoneStore = create<NoFlyZoneState>((set, get) => ({
   noFlyZones: [],
   selectedNoFlyZone: null,
+  affectedMissions: [],
   isLoading: false,
   error: null,
 
@@ -93,6 +97,40 @@ export const useNoFlyZoneStore = create<NoFlyZoneState>((set) => ({
       return false;
     } catch (e) {
       return false;
+    }
+  },
+
+  toggleActive: async (id: string) => {
+    try {
+      const zone = get().noFlyZones.find((z) => z.id === id);
+      if (!zone) return false;
+      const newIsActive = !zone.isActive;
+      const response = await noFlyZoneApi.toggleActive(id, newIsActive);
+      if (response.success && response.data) {
+        set((state) => ({
+          noFlyZones: state.noFlyZones.map((z) =>
+            z.id === id ? response.data : z
+          ),
+        }));
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  fetchAffectedMissions: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await noFlyZoneApi.getAffectedMissions();
+      if (response.success) {
+        set({ affectedMissions: response.data || [], isLoading: false });
+      } else {
+        set({ error: response.error || '获取受影响任务失败', isLoading: false });
+      }
+    } catch (e: any) {
+      set({ error: e.message, isLoading: false });
     }
   },
 

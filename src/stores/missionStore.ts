@@ -35,7 +35,7 @@ interface MissionState {
   returnToBase: (id: string) => Promise<boolean>;
   takePhoto: (id: string) => Promise<boolean>;
   confirmReceipt: (id: string, receiptImage: string) => Promise<boolean>;
-  reassignMission: (id: string, newDroneId: string) => Promise<boolean>;
+  reassignMission: (id: string, newDroneId: string, reason?: string) => Promise<boolean>;
   exportPlaybackData: (id: string) => Promise<void>;
   selectMission: (mission: FlightMission | null) => void;
   subscribeToTelemetry: (callback: (data: TelemetryData) => void) => () => void;
@@ -288,9 +288,9 @@ export const useMissionStore = create<MissionState>((set, get) => ({
     }
   },
 
-  reassignMission: async (id: string, newDroneId: string) => {
+  reassignMission: async (id: string, newDroneId: string, reason?: string) => {
     try {
-      const response = await missionApi.reassignMission(id, newDroneId);
+      const response = await missionApi.reassignMission(id, newDroneId, reason);
       if (response.success) {
         await get().fetchMissions();
         return true;

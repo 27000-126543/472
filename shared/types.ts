@@ -95,6 +95,7 @@ export interface Drone {
   model: string;
   serialNumber: string;
   maxPayload: number;
+  payloadCapacity: number;
   maxFlightTime: number;
   cruiseSpeed: number;
   status: DroneStatus;
@@ -188,17 +189,21 @@ export interface FlightMission {
   routeId: string;
   operatorId?: string;
   status: MissionStatus;
+  riskReason?: string;
+  routeSummary?: string;
   startTime?: string;
   takeoffTime?: string;
   deliveryTime?: string;
   returnTime?: string;
   endTime?: string;
+  completedAt?: string;
   actualFlightTime?: number;
   actualDistance?: number;
   batteryUsed?: number;
   maxAltitude?: number;
   maxSpeed?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface TelemetryData {
